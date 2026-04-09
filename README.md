@@ -66,9 +66,7 @@
 ### 安装依赖
 
 ```bash
-yum install -y python3-pip
-pip3 install pyinstaller
-pip3 install pymysql psycopg2-binary paramiko openpyxl docxtpl python-docx pandas psutil==5.9.0
+pip3 install pyinstaller pymysql psycopg2-binary paramiko openpyxl docxtpl python-docx pandas psutil==5.9.0
 ```
 
 ### 启动巡检
