@@ -77,8 +77,20 @@ pip3 install pymysql psycopg2-binary paramiko openpyxl docxtpl python-docx panda
 python3 main.py
 ```
 
-主菜单提供四个选项：
+数据库类型菜单提供五个选项：
+| 选项 | 说明 |
+|:---:|------|
+| 1 | MySQL - MySQL 数据库健康检查与报告生成|
+| 2 | PostgreSQL - PostgreSQL 数据库健康检查与报告生成 |
+| 3 | 生成 Excel 批量巡检模板（MySQL） |
+| 4 | 生成 Excel 批量巡检模板（PostgreSQL） |
+| 5 | 退出 |
 
+1. 选择菜单 **1** 或 **2**，进入 `MySQL` 或 `PostgreSQL` 巡检功能菜单
+2. 选择菜单 **3** 或 **4**，生成 `mysql_batch_template.xlsx` 或 `pg_batch_template.xlsx` 配置模板
+3. 选择菜单 **5** 退出工具
+
+功能菜单提供四个选项：
 | 选项 | 说明 |
 |:---:|------|
 | 1 | 单机巡检 |
@@ -86,11 +98,15 @@ python3 main.py
 | 3 | 创建 Excel 配置模板 |
 | 4 | 退出 |
 
-### 批量巡检
+#### 单机巡检
+1. 选择 **1**  进入单机巡检
+2. 根据提示填写数据库连接信息及 SSH 信息（可选）
+3. 工具自动进行巡检并生成 word巡检报告
 
-1. 选择菜单 **3**，生成 `mysql_batch_template.xlsx` 配置模板
-2. 在模板中填写数据库连接信息及 SSH 信息（可选）
-3. 选择菜单 **2**，程序自动读取配置并依次巡检所有实例
+#### 批量巡检
+
+1. 选择菜单 **2**，程序自动读取配置并依次巡检所有实例
+2. 工具自动根据 Excel 模型中的内容批量巡检
 
 > 注意：Excel 模板中请勿明文保存密码，填写完成后注意妥善保管配置文件。
 
