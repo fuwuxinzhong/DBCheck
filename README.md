@@ -45,4 +45,4 @@ pyinstaller --onefile --name mysql_inspector \
 
 原项目作者公众号文章：[小周的数据库进阶之路](https://mp.weixin.qq.com/s/rogoiuYtpU07O55_VqBK8w?scene=1&click_id=8)
 
-目前部分功能正在持续完善中，欢迎反馈问题或提出建议！
+目前部分功能正在持续完善中，欢迎参与共同完善反馈问题或提出建议！
