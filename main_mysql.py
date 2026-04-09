@@ -2513,14 +2513,14 @@ def main():
         elif choice == '3':
             create_excel_template()
         elif choice == '4':
-            print("\n感谢使用MySQL数据库巡检工具！")
+            print("\n感谢使用 DBCheck MySQL 数据库巡检工具！")
             break
         if choice != '4':
             continue_choice = input("\n是否返回主菜单? (y/n) [y]: ").strip().lower()
             if continue_choice in ['', 'y', 'yes']:
                 continue
             else:
-                print("\n感谢使用MySQL数据库巡检工具！")
+                print("\n感谢使用 DBCheck MySQL 数据库巡检工具！")
                 break
     end_time = time.time()
     print(f"\n程序运行总耗时: {end_time - start_time:.2f}秒")
