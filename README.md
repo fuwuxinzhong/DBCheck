@@ -1,5 +1,8 @@
 # 数据库巡检工具 - DBCheck（MySQL、PostgreSQL）
-> 本项目是在 Zhh9126/MySQLDBCHECK 基础上增加了对 PostgreSQL 的支持
+
+> 本项目是在 Zhh9126/MySQLDBCHECK 基础上增加了对 PostgreSQL 的支持。
+> 主要功能为 MySQL 和 PostgreSQL 数据库巡检并自动生成 Word 格式巡检报告。
+> 详细项目介绍及使用方法见公众号 [小周的数据库进阶之路](https://mp.weixin.qq.com/s/rogoiuYtpU07O55_VqBK8w?scene=1&click_id=8)
 
 ## 安装依赖
 ```bash
@@ -39,5 +42,7 @@ pyinstaller --onefile --name mysql_inspector \
 本项目是在 [Zhh9126/MySQLDBCHECK](https://github.com/Zhh9126/MySQLDBCHECK.git) 基础上改进而来，在原 MySQL 数据库巡检功能的基础上增加了 **PostgreSQL** 数据库支持。
 
 感谢 [Zhh9126/MySQLDBCHECK](https://github.com/Zhh9126/MySQLDBCHECK.git) 作者的付出！
+
+原项目作者公众号文章：[小周的数据库进阶之路](https://mp.weixin.qq.com/s/rogoiuYtpU07O55_VqBK8w?scene=1&click_id=8)
 
 目前部分功能正在持续完善中，欢迎反馈问题或提出建议！
