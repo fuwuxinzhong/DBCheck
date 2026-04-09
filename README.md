@@ -170,4 +170,4 @@ cd dist
 
 感谢 [Zhh9126/MySQLDBCHECK](https://github.com/Zhh9126/MySQLDBCHECK.git) 作者的贡献！
 
-目前部分功能仍在持续完善中，欢迎反馈问题与建议。
+目前部分功能仍在持续完善中，欢迎共同参与功能开发以及反馈问题与建议。
