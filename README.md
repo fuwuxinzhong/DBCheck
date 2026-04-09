@@ -165,5 +165,6 @@ pyinstaller --onefile --name db_inspector \
    内置阈值基于通用最佳实践，实际场景中请结合业务负载综合评估。
 
 ---
+## 鸣谢
 
 感谢 [Zhh9126/MySQLDBCHECK](https://github.com/Zhh9126/MySQLDBCHECK.git) 作者的贡献！
