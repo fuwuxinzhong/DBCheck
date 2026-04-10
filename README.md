@@ -1,6 +1,6 @@
 # 数据库巡检工具 - DBCheck
 
-支持对 **MySQL** 和 **PostgreSQL** 两种主流关系型数据库进行自动化健康巡检，生成格式规范的 Microsoft Word 报告，帮助 DBA 和运维人员快速掌握数据库运行状况、发现潜在风险。
+支持对 **MySQL** 和 **PostgreSQL** 两种主流关系型数据库进行自动化健康巡检，生成格式规范的 Microsoft Word 报告，帮助 DBA 和运维人员快速掌握数据库运行状况、发现潜在风险。本项目已发布为 ClawHub 上的 OpenClaw Skill，AI 助手中安装 dbcheck skill 后可通过自然语言直接触发巡检。
 
 ## 四种使用方式
 
