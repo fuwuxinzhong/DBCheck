@@ -174,6 +174,9 @@ python3 web_ui.py
 
 本项目已发布为 [ClawHub](https://clawhub.ai/skills/dbcheck) 上的 OpenClaw Skill，接入 AI 助手后可通过自然语言直接触发巡检，无需手动操作命令行或 Web UI。
 
+![Clawhub dbcheck skill](snapshot/skill0.png)
+*dbcheck 已发布到 Clawhub*
+
 #### 安装方式
 
 在 OpenClaw 客户端执行：
@@ -181,6 +184,9 @@ python3 web_ui.py
 ```bash
 clawhub install dbcheck
 ```
+
+![QClaw](snapshot/skill1.png)
+*也可以 QClaw 等支持 OpenClaw Skills 软件中使用 dbcheck。*
 
 #### 使用方式
 
