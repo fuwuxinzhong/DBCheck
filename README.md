@@ -266,6 +266,9 @@ python3 web_ui.py
 ![历史趋势分析](snapshot/webui12.png)
 *图 12：历史趋势分析*
 
+![AI 诊断配置](snapshot/webui12.png)
+*图 13：AI 诊断配置，可完全本地运行，无需 API Key，数据不出本机。*
+
 ### OpenClaw Skill（AI 助手直连）
 
 本项目已发布为 [ClawHub](https://clawhub.ai/skills/dbcheck) 上的 OpenClaw Skill，接入 AI 助手后可通过自然语言直接触发巡检，无需手动操作命令行或 Web UI。
