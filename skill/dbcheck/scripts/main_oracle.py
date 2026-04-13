@@ -336,6 +336,272 @@ def get_host_disk_usage():
     return list(disk_dict.values())
 
 
+# ============================================================
+# 权限友好型 SQL 执行器（借鉴 Oracledbcheck 容错设计）
+# ============================================================
+
+# Oracle 错误码 → 中文建议映射
+_ORACLE_ERROR_HINTS = {
+    1031: ("权限不足 (ORA-01031)", "请使用 SYSDBA 身份连接，或授予用户 DBA/SELECT ANY DICTIONARY 权限"),
+    942:  ("表/视图不存在 (ORA-00942)", "该对象可能不存在于当前 Oracle 版本，或需要更高权限访问"),
+    904:  ("字段无效 (ORA-00904)", "SQL 中使用的列名在当前版本不可用，可能需要适配 SQL 模板"),
+    933:  ("SQL 命令未正确结束 (ORA-00933)", "SQL 语法错误，通常由不兼容的分号或其他语法问题引起"),
+    18:   ("列名模糊 (ORA-00918)", "JOIN 多表时存在重复列名，需明确指定表别名"),
+    37:   ("单行子查询返回多行 (ORA-00937)", "聚合函数与非聚合列混用，需补充 GROUP BY 或子查询"),
+}
+
+
+def execute_query_safe(cursor, sql, item_name=""):
+    """
+    安全执行 SQL，统一捕获所有 Oracle 错误并返回空结果（不中断流程）。
+
+    Args:
+        cursor: 已打开的数据库游标
+        sql: 要执行的 SQL 语句（已去除尾部分号）
+        item_name: 当前检查项名称（用于日志输出）
+
+    Returns:
+        dict: {"columns": [str], "data": [dict]} — 即使出错也返回空结构
+    """
+    try:
+        cursor.execute(sql)
+        columns = [col[0] for col in cursor.description]
+        data = []
+        for row in cursor.fetchall():
+            data.append(dict(zip(columns, row)))
+        return {"columns": columns, "data": data}
+
+    except oracle_driver.OperationalError as e:
+        # 连接类错误：网络断开、TNS 无法解析等
+        err_code, _ = _parse_oracle_error(e)
+        hint = _ORACLE_ERROR_HINTS.get(err_code)
+        if hint:
+            print(f"⚠️  [{item_name}] {hint[0]}\n    💡 建议: {hint[1]}")
+        else:
+            print(f"⚠️  [{item_name}] 连接/网络错误 ({err_code}): {str(e)[:100]}")
+        return {"columns": [], "data": []}
+
+    except oracle_driver.DatabaseError as e:
+        err_code, _ = _parse_oracle_error(e)
+        hint = _ORACLE_ERROR_HINTS.get(err_code)
+        if hint:
+            print(f"⚠️  [{item_name}] {hint[0]}\n    💡 建议: {hint[1]}")
+        else:
+            print(f"⚠️  [{item_name}] 数据库错误 ({err_code}): {str(e)[:120]}")
+        return {"columns": [], "data": []}
+
+    except Exception as e:
+        print(f"⚠️  [{item_name}] 未知异常 ({type(e).__name__}): {str(e)[:100]}")
+        return {"columns": [], "data": []}
+
+
+def _parse_oracle_error(exc):
+    """从 Oracle 异常中提取错误码和消息"""
+    try:
+        args = exc.args
+        if not args:
+            return 0, ""
+        # oracledb 格式: (error_code, message) 或直接字符串
+        first_arg = args[0]
+        if isinstance(first_arg, int):
+            return first_arg, str(args[1]) if len(args) > 1 else ""
+        # cx_Oracle / oracledb Error 对象
+        msg_str = str(first_arg)
+        # 提取 ORA-xxxxx 中的数字
+        m = re.search(r'ORA-(\d+)', msg_str)
+        if m:
+            return int(m.group(1)), msg_str
+        return 0, msg_str
+    except Exception:
+        return 0, ""
+
+
+# ============================================================
+# 智能健康评分算法（借鉴 Oracledbcheck 分析引擎）
+# ============================================================
+
+def analyze_health_status(context):
+    """
+    综合评估 Oracle 数据库健康状况。
+
+    Returns:
+        dict: {
+            "status": "正常" | "警告" | "严重",
+            "score": float (0-100),
+            "critical_count": int,
+            "warning_count": int,
+            "alerts": [{"level": "critical|warning", "message": str}]
+        }
+    """
+    alerts_critical = []
+    alerts_warning = []
+
+    # ── 1. 表空间使用率 ──────────────────────
+    ts_list = context.get('ora_tablespace', [])
+    if ts_list and isinstance(ts_list, list):
+        for ts in ts_list:
+            if not isinstance(ts, dict): continue
+            used_pct = _safe_float_val(ts.get('used_pct_with_maxext') or ts.get('used_pct', 0))
+            name = ts.get('TABLESPACE_NAME', ts.get('tablespace_name', '?'))
+            total_mb = _safe_float_val(ts.get('TOTAL_MB', ts.get('total_mb', 0)))
+            free_mb = _safe_float_val(ts.get('FREE_MB', ts.get('free_mb', 0)))
+
+            if used_pct >= 95:
+                alerts_critical.append(
+                    f"[紧急] 表空间 {name} 使用率 {used_pct:.1f}% "
+                    f"(总计 {total_mb:.0f}MB，剩余 {free_mb:.0f}MB)，需立即扩容"
+                )
+            elif used_pct >= 85:
+                alerts_warning.append(
+                    f"[关注] 表空间 {name} 使用率 {used_pct:.1f}% "
+                    f"(剩余 {free_mb:.0f}MB)，建议提前规划扩容"
+                )
+
+    # ── 2. 临时表空间 ────────────────────────
+    temp_list = context.get('ora_temp_ts', [])
+    if temp_list and isinstance(temp_list, list):
+        for tp in temp_list:
+            if not isinstance(tp, dict): continue
+            used_pct = _safe_float_val(tp.get('USED_PCT', tp.get('used_pct', 0)))
+            name = tp.get('TABLESPACE_NAME', tp.get('tablespace_name', 'TEMP'))
+            if used_pct >= 80:
+                alerts_warning.append(f"[关注] 临时表空间 {name} 使用率 {used_pct:.1f}%")
+
+    # ── 3. 会话数接近上限 ────────────────────
+    sess = context.get('ora_sessions', [])
+    limit = context.get('ora_session_limit', [])
+    if sess and limit and isinstance(sess, list) and isinstance(limit, list):
+        try:
+            total = _safe_int_val(sess[0].get('TOTAL_SESSIONS', sess[0].get('total_sessions', 0)))
+            max_sess = _safe_int_val(limit[0].get('SESSIONS_LIMIT', limit[0].get('sessions_limit', 0)))
+            if max_sess > 0 and total > 0:
+                pct = total * 100 / max_sess
+                if pct >= 95:
+                    alerts_critical.append(
+                        f"[紧急] 会话总数 {total}/{max_sess} ({pct:.0f}%)，即将耗尽会话资源"
+                    )
+                elif pct >= 85:
+                    alerts_warning.append(
+                        f"[关注] 会话总数 {total}/{max_sess} ({pct:.0f}%)，接近上限"
+                    )
+        except (IndexError, KeyError, TypeError):
+            pass
+
+    # ── 4. 锁等待数量 ────────────────────────
+    blocked = context.get('ora_blocked', [])
+    if blocked and isinstance(blocked, list):
+        lock_cnt = len(blocked)
+        if lock_cnt >= 5:
+            alerts_critical.append(
+                f"[紧急] 发现 {lock_cnt} 个锁等待，可能导致业务阻塞，需立即排查"
+            )
+        elif lock_cnt >= 2:
+            alerts_warning.append(
+                f"[关注] 发现 {lock_cnt} 个锁等待，建议排查阻塞源"
+            )
+
+    # ── 5. 无效对象数量 ──────────────────────
+    invalid = context.get('ora_invalid_cnt', [])
+    if invalid and isinstance(invalid, list):
+        total_invalid = sum(_safe_int_val(iv.get('INVALID_COUNT', iv.get('invalid_count', 0))) for iv in invalid if isinstance(iv, dict))
+        if total_invalid >= 20:
+            alerts_warning.append(
+                f"[关注] 存在 {total_invalid} 个无效对象，建议编译或清理"
+            )
+        elif total_invalid > 0:
+            pass  # 少量无效对象属正常
+
+    # ── 6. 系统内存紧张 ──────────────────────
+    sys_info = context.get('system_info', {})
+    mem = sys_info.get('memory', {}) if isinstance(sys_info, dict) else {}
+    if isinstance(mem, dict):
+        mem_pct = _safe_float_val(mem.get('usage_percent', 0))
+        if mem_pct >= 95:
+            alerts_critical.append(f"[紧急] 系统内存使用率 {mem_pct:.1f}%，存在 OOM 风险")
+        elif mem_pct >= 90:
+            alerts_warning.append(f"[关注] 系统内存使用率 {mem_pct:.1f}%")
+
+    # ── 7. 磁盘空间不足 ──────────────────────
+    disks = sys_info.get('disk_list', []) if isinstance(sys_info, dict) else []
+    if disks and isinstance(disks, list):
+        for d in disks:
+            if not isinstance(d, dict): continue
+            mp = d.get('mountpoint', '/')
+            if mp in IGNORE_MOUNTS: continue
+            usage = _safe_float_val(d.get('usage_percent', 0))
+            if usage >= 98:
+                alerts_critical.append(
+                    f"[紧急] 磁盘分区 {mp} 使用率 {usage:.1f}%，即将写满"
+                )
+            elif usage >= 90:
+                alerts_warning.append(
+                    f"[关注] 磁盘分区 {mp} 使用率 {usage:.1f}%"
+                )
+
+    # ── 8. FRA 闪回区空间 ────────────────────
+    fra = context.get('ora_flashback_area', [])
+    if fra and isinstance(fra, list):
+        for f in fra:
+            if not isinstance(f, dict): continue
+            used_pct = _safe_float_val(f.get('USED_PCT', f.get('used_pct', 0)))
+            if used_pct >= 90:
+                alerts_warning.append(
+                    f"[关注] 闪回恢复区(FRA)使用率 {used_pct:.1f}%"
+                )
+
+    # ── 9. Undo 段争用 ───────────────────────
+    undo_info = context.get('ora_undo_info', [])
+    if undo_info and isinstance(undo_info, list) and len(undo_info) > 0:
+        u = undo_info[0]
+        if isinstance(u, dict):
+            exp_blks = _safe_int_val(u.get('EXP_UNDO_BLKS', u.get('exp_undo_blks', 0)))
+            if exp_blks > 5000:
+                alerts_warning.append("[关注] 过去24小时 Undo 扩展块较多，undo_retention 可能偏大")
+
+    # ── 综合评分 ─────────────────────────────
+    critical_n = len(alerts_critical)
+    warning_n = len(alerts_warning)
+
+    # 基础分 100 分，按告警扣分
+    score = 100.0 - critical_n * 15 - warning_n * 5
+    score = max(0, min(100, score))
+
+    if critical_n > 0:
+        status = "严重"
+    elif warning_n >= 4:
+        status = "警告"
+    elif warning_n > 0:
+        status = "一般"
+    else:
+        status = "正常"
+
+    return {
+        "status": status,
+        "score": round(score, 1),
+        "critical_count": critical_n,
+        "warning_count": warning_n,
+        "alerts": alerts_critical + alerts_warning
+    }
+
+
+def _safe_float_val(val, default=0.0):
+    """安全转浮点数"""
+    try:
+        if val is None: return default
+        return float(str(val).replace(',', '').replace('%', '').strip())
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_int_val(val, default=0):
+    """安全转整数"""
+    try:
+        if val is None: return default
+        return int(str(val).replace(',', '').strip())
+    except (ValueError, TypeError):
+        return default
+
+
 def create_word_template(inspector_name="Jack"):
     """
     创建 Oracle 巡检报告的 Word 模板（基于 docxtpl Jinja2 模板）。
@@ -353,25 +619,53 @@ def create_word_template(inspector_name="Jack"):
 
     # 标题样式
     title_style = doc.styles.add_style('ReportTitle', 1)
-    title_style.font.size = Pt(24)
+    title_style.font.size = Pt(22)          # 二号字体
     title_style.font.bold = True
+    title_style.font.name = '微软雅黑'
     title_style.font.color.rgb = RGBColor(0,51,102)
 
     heading1 = doc.styles.add_style('Heading1Custom', 1)
-    heading1.font.size = Pt(18)
+    heading1.font.size = Pt(14)            # 四号（章节标题）
     heading1.font.bold = True
+    heading1.font.name = '微软雅黑'
     heading1.font.color.rgb = RGBColor(0,51,102)
 
     heading2 = doc.styles.add_style('Heading2Custom', 1)
-    heading2.font.size = Pt(14)
+    heading2.font.size = Pt(12)            # 小四号（子标题）
     heading2.font.bold = True
+    heading2.font.name = '微软雅黑'
 
-    # 封面
+    def _beautify_table(tbl, is_info_table=False):
+        """美化表格：表头浅蓝底+加粗，字段列浅灰底，值列白色"""
+        for ri, row in enumerate(tbl.rows):
+            for ci, cell in enumerate(row.cells):
+                for para in cell.paragraphs:
+                    para.paragraph_format.space_before = Pt(2)
+                    para.paragraph_format.space_after = Pt(2)
+                    for run in para.runs:
+                        run.font.size = Pt(9)       # 小五号表格文字
+                        run.font.name = '微软雅黑'
+                        if ri == 0:                  # 表头行
+                            run.font.bold = True
+                if ri == 0:                          # 表头浅蓝色背景
+                    _set_cell_bg(cell, 'DCE6F1')
+                    cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                elif is_info_table and ci == 0:      # 信息表字段列浅灰色
+                    _set_cell_bg(cell, 'F2F2F2')
+                else:
+                    cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    def _set_cell_bg(cell, hex_color):
+        from docx.oxml.ns import nsdecls
+        from docx.oxml import parse_xml
+        shading_elm = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
+        cell._tc.get_or_add_tcPr().append(shading_elm)
+
+    # ── 封面标题（二号）─────────
     doc.add_paragraph("Oracle数据库健康巡检报告", style='ReportTitle')
     doc.add_paragraph("")
-    # 基本信息表（与 PostgreSQL 报告格式一致）
+    # 基本信息表（美化版）
     info_table = doc.add_table(rows=8, cols=2)
-    info_table.style = 'Light Grid Accent 1'
     info_cells = [
         ("数据库名称",     "{{{ co_name }}}"),
         ("服务器地址",     "{{{ server_addr }}}"),
@@ -385,6 +679,7 @@ def create_word_template(inspector_name="Jack"):
     for i, (label, value) in enumerate(info_cells):
         info_table.cell(i, 0).text = label
         info_table.cell(i, 1).text = value
+    _beautify_table(info_table, is_info_table=True)
 
     # 第1章 基本信息
     doc.add_paragraph("\n第1章 数据库基本信息", style='Heading1Custom')
@@ -400,37 +695,42 @@ def create_word_template(inspector_name="Jack"):
     for i, (k, v) in enumerate(cells):
         t.cell(i, 0).text = k; t.cell(i, 1).text = v
 
-    # 第2章 实例状态
-    doc.add_paragraph("\n第2章 实例与运行状态", style='Heading1Custom')
+    # 第2章 巡检执行摘要（健康评分 + SQL执行情况）
+    doc.add_paragraph("\n第2章 巡检执行摘要", style='Heading1Custom')
+    doc.add_paragraph("{{{ health_summary_text }}}")
+    doc.add_paragraph("{{{ error_summary_text }}}")
+
+    # 第3章 实例状态（原第2章）
+    doc.add_paragraph("\n第3章 实例与运行状态", style='Heading1Custom')
     doc.add_paragraph("{{{ ora_instance }}}")
 
-    # 第3章 表空间
-    doc.add_paragraph("\n第3章 表空间使用情况", style='Heading1Custom')
+    # 第4章 表空间（原第3章）
+    doc.add_paragraph("\n第4章 表空间使用情况", style='Heading1Custom')
     doc.add_paragraph("{{{ ora_tablespace }}}")
 
-    # 第4章 SGA/PGA 内存
-    doc.add_paragraph("\n第4章 SGA/PGA 内存分析", style='Heading1Custom')
+    # 第5章 SGA/PGA 内存（原第4章）
+    doc.add_paragraph("\n第5章 SGA/PGA 内存分析", style='Heading1Custom')
     doc.add_paragraph("{{{ ora_sga_total }}}\n{{{ ora_sga }}}\n{{{ ora_pga }}}")
 
-    # 第5章 会话与锁
-    doc.add_paragraph("\n第5章 会话与锁等待", style='Heading1Custom')
+    # 第6章 会话与锁（原第5章）
+    doc.add_paragraph("\n第6章 会话与锁等待", style='Heading1Custom')
     doc.add_paragraph("{{{ ora_sessions }}}\n{{{ ora_blocked }}}")
 
-    # 第6章 Redo/归档
-    doc.add_paragraph("\n第6章 Redo 日志与归档", style='Heading1Custom')
+    # 第7章 Redo/归档（原第6章）
+    doc.add_paragraph("\n第7章 Redo 日志与归档", style='Heading1Custom')
     doc.add_paragraph("{{{ ora_redo_logs }}}\n{{{ ora_archive_lag }}}")
 
-    # 第7章 系统资源
-    doc.add_paragraph("\n第7章 系统资源监控", style='Heading1Custom')
+    # 第8章 系统资源（原第7章）
+    doc.add_paragraph("\n第8章 系统资源监控", style='Heading1Custom')
     doc.add_paragraph("{{{ system_info_text }}}")
 
-    # 第8章 无效对象 & 用户
-    doc.add_paragraph("\n第8章 对象与用户安全", style='Heading1Custom')
-    doc.add_paragraph("8.1 无效对象\n{{{ ora_invalid_cnt }}}")
-    doc.add_paragraph("8.2 用户列表\n{{{ ora_users }}}")
+    # 第9章 无效对象 & 用户（原第8章）
+    doc.add_paragraph("\n第9章 对象与用户安全", style='Heading1Custom')
+    doc.add_paragraph("9.1 无效对象\n{{{ ora_invalid_cnt }}}")
+    doc.add_paragraph("9.2 用户列表\n{{{ ora_users }}}")
 
-    # 第9章 报告说明（与 PostgreSQL 格式一致）
-    doc.add_paragraph("\n9. 报告说明", style='Heading1Custom')
+    # 第10章 报告说明（与 PostgreSQL 格式一致，原第9章）
+    doc.add_paragraph("\n第10章 报告说明", style='Heading1Custom')
     doc.add_paragraph("{{{ notes_text }}}")
 
     os.makedirs(template_path, exist_ok=True)
@@ -582,34 +882,29 @@ class getData(object):
             print(f"❌ 获取版本失败: {e}")
             self.context.update({"ora_version": [{'BANNER': 'Unknown'}]})
 
-        # ── 步骤2-21: 执行所有 SQL ───────────────────
+        # ── 步骤2-21: 执行所有 SQL（使用容错执行器，单个失败不中断） ───────────────────
         try:
             cursor = self.conn_db2.cursor()
             variables_items = list(cfg.items("variables"))
             for i, (name, stmt) in enumerate(variables_items):
-                try:
-                    current_step = int((i + 1) / len(variables_items) * (total_steps - 6)) + 1
-                    self.print_progress_bar(current_step, total_steps, prefix='Oracle巡检:', suffix=f'{name} ({i+1}/{len(variables_items)})')
-                    clean_sql = stmt.replace('\n', ' ').replace('\r', ' ')
-                    # 移除尾部分号：DB-API 的 cursor.execute() 不接受 ;
-                    # （; 是 SQL*Plus 命令终止符，不是 SQL 语句的一部分）
-                    clean_sql = clean_sql.rstrip().rstrip(';').strip()
-                    cursor.execute(clean_sql)
-                    columns = [col[0] for col in cursor.description]
-                    result = []
-                    for row in cursor.fetchall():
-                        result.append(dict(zip(columns, row)))
-                    self.context[name] = result
-                    time.sleep(0.03)
-                except Exception as e:
-                    print(f"\n⚠️  {name} 执行失败: {str(e)[:120]}")
-                    self.context[name] = []
+                current_step = int((i + 1) / len(variables_items) * (total_steps - 6)) + 1
+                self.print_progress_bar(current_step, total_steps, prefix='Oracle巡检:', suffix=f'{name} ({i+1}/{len(variables_items)})')
+                clean_sql = stmt.replace('\n', ' ').replace('\r', ' ')
+                # 移除尾部分号：DB-API 的 cursor.execute() 不接受 ;
+                clean_sql = clean_sql.rstrip().rstrip(';').strip()
+                
+                result = execute_query_safe(cursor, clean_sql, item_name=name)
+                self.context[name] = result.get('data', [])
+                time.sleep(0.03)
         except Exception as e:
-            print(f'\n❌ 数据库查询失败: {e}')
+            print(f'\n❌ 数据库查询循环异常: {e}')
         finally:
             if 'cursor' in locals():
                 try: cursor.close()
                 except Exception: pass
+
+        # 将容错执行结果存入 context（供报告"巡检执行摘要"章节展示）
+        self.context['_safe_errors'] = getattr(execute_query_safe, '_errors', [])
 
         # ── 步骤: 收集系统信息 ─────────────────────
         current_step = total_steps - 4
@@ -647,19 +942,53 @@ class getData(object):
                                'total_gb':0,'used_gb':0,'free_gb':0,'usage_percent':0}]
             }})
 
-        # ── 步骤: 风险分析 ─────────────────────────
+        # ── 步骤: 风险分析（智能健康评分） ─────────────────────────
         current_step = total_steps - 3
-        self.print_progress_bar(current_step, total_steps, prefix='Oracle巡检:', suffix='智能风险分析')
+        self.print_progress_bar(current_step, total_steps, prefix='Oracle巡检:', suffix='智能健康评估')
         self.context.update({"auto_analyze": []})
         try:
+            # 优先使用 analyzer.py 的深度分析
             from analyzer import smart_analyze_oracle
             issues = smart_analyze_oracle(self.context)
             self.context['auto_analyze'] = issues
         except ImportError:
-            # 降级基础规则
             self._basic_risk_check()
         except Exception as e:
             print(f"\n❌ 风险分析失败: {e}")
+        
+        # 始终执行健康评分（独立于风险分析）
+        health = analyze_health_status(self.context)
+        self.context['health_analysis'] = health
+        
+        # 将健康评分的告警合并到 auto_analyze（去重）
+        existing_items = {a.get('col3', '') for a in self.context.get('auto_analyze', [])}
+        for alert in health['alerts']:
+            level = '高' if alert.startswith('[紧急]') else '中'
+            # 简短标题（去掉前缀 [紧急]/[关注] ）
+            title = alert.split(']', 1)[1].strip() if ']' in alert else alert[:50]
+            if alert not in existing_items:
+                self.context['auto_analyze'].append({
+                    'col1': title,
+                    'col2': f'{level}风险',
+                    'col3': alert.replace('[紧急] ', '').replace('[关注] ', ''),
+                    'col4': level,
+                    'col5': 'DBA/系统管理员',
+                    'fix_sql': ''
+                })
+        
+        # 更新整体健康状态
+        if health['status'] in ('严重',):
+            self.context.update({"health_status": "需紧急处理"})
+        elif health['status'] == '警告':
+            self.context.update({"health_status": "需关注"})
+        elif health['status'] == '一般':
+            self.context.update({"health_status": "良好"})
+        else:
+            problem_count = len(self.context.get("auto_analyze", []))
+            if problem_count == 0:
+                self.context.update({"health_status": "优秀"})
+            elif problem_count <= 3:
+                self.context.update({"health_status": "良好"})
 
         # ── 步骤: AI 诊断 ─────────────────────────
         current_step = total_steps - 2
@@ -879,20 +1208,19 @@ class saveDoc(object):
             mem = sys_info.get('memory', {}) or {}
             disks = sys_info.get('disk_list', []) or []
             lines = []
-            lines.append(f"CPU 使用率: {cpu.get('usage_percent', 'N/A')}%")
+            lines.append(f"CPU 使用率\t{cpu.get('usage_percent', 'N/A')}%")
             used_mb = mem.get('used_mb', 0)
             total_mb = mem.get('total_mb', 0)
             mem_pct = mem.get('usage_percent', 0)
-            lines.append(f"内存使用: {used_mb} MB / {total_mb} MB ({mem_pct}%)")
+            lines.append(f"内存使用\t{used_mb} MB / {total_mb} MB ({mem_pct}%)")
             if disks and isinstance(disks, list):
-                lines.append("磁盘空间:")
                 for d in disks[:10]:
                     mp = d.get('mountpoint', '/')
                     tg = d.get('total_gb', 0)
                     ug = d.get('used_gb', 0)
                     fg = d.get('free_gb', 0)
                     up = d.get('usage_percent', 0)
-                    lines.append(f"  {mp}\t{tg}GB\t{ug}GB\t{fg}GB\t{up}%")
+                    lines.append(f"磁盘 {mp}\t{up}% (已用 {ug}GB / 共 {tg}GB)")
             self.context['system_info_text'] = '\n'.join(lines)
 
             # 第9章报告说明预格式化
@@ -905,6 +1233,67 @@ class saveDoc(object):
                 "6. AI 诊断功能（若启用）生成的建议仅供参考，不构成专业 DBA 意见"
             ]
             self.context['notes_text'] = '\n'.join(notes)
+
+            # ── 巡检执行摘要预格式化（第2章专用：健康评分 + SQL执行情况）──
+            health = self.context.get('health_analysis')
+            if isinstance(health, dict):
+                score = health.get('score', 100)
+                status = health.get('status', '正常')
+                crit_n = health.get('critical_count', 0)
+                warn_n = health.get('warning_count', 0)
+                dims = health.get('dimensions', [])
+                # 健康评分表格文本
+                hs_lines = [
+                    f"综合评分\t{score}\t状态\t{status}",
+                    f"紧急告警数\t{crit_n}\t警告告警数\t{warn_n}"
+                ]
+                for d in dims:
+                    hs_lines.append(f"{d['name']}\t{d['score']}\t{d['level']}\t{d['detail']}")
+                self.context['health_summary_text'] = '\n'.join(hs_lines)
+            else:
+                self.context['health_summary_text'] = ''
+
+            # SQL 执行情况汇总
+            errors = self.context.get('_safe_errors', [])
+            total_sql = len([
+                k for k in list_keys if k in [
+                    'ora_tablespace','ora_temp_ts','ora_sessions','ora_blocked',
+                    'ora_sga','ora_sga_total','ora_pga','ora_memory_target',
+                    'ora_redo_logs','ora_redo_status','ora_archive_dest',
+                    'ora_archive_lag','ora_backup','ora_params',
+                    'ora_invalid_objs','ora_invalid_cnt','ora_users',
+                    'ora_sys_privs','ora_default_pws','ora_long_sql',
+                    'ora_top_sql_cpu','ora_dg_status','ora_dg_apply',
+                    'ora_standby_event','ora_rac_nodes','ora_rac_interconn',
+                    'ora_asm_diskgroup','ora_undo_info','ora_recyclebin',
+                    'ora_flashback_area','ora_datafiles','ora_profile_pwd',
+                    'ora_top_waits','ora_wait_class','ora_stale_stats',
+                    'ora_partition_info'
+                ]
+            ])
+            fail_count = len(errors) if errors else 0
+            ok_count = total_sql - fail_count
+            # 统计汇总表（独立）
+            es_stat_lines = [
+                f"总SQL数\t{ok_count + fail_count}\t-",
+                f"成功数\t{ok_count}\t-",
+                f"失败数\t{fail_count}\t-"
+            ]
+            self.context['error_stats_text'] = '\n'.join(es_stat_lines)
+
+            # 错误明细表（独立，仅在有失败时输出）
+            if errors:
+                ed_hdr = "SQL名称\t错误码\t修复建议"
+                ed_rows = []
+                for err in errors[:30]:
+                    name = err.get('item_name', '')
+                    code = err.get('code', '')
+                    hint = err.get('hint', '')
+                    if len(hint) > 80: hint = hint[:77] + '...'
+                    ed_rows.append(f"{name}\tORA-{code:05d}\t{hint}")
+                self.context['error_detail_text'] = ed_hdr + '\n' + '\n'.join(ed_rows)
+            else:
+                self.context['error_detail_text'] = '-'
 
             # 列表数据预格式化为表格文本
             _list_keys_to_text = ['ora_tablespace','ora_sessions','ora_blocked','ora_sga',
@@ -968,8 +1357,14 @@ class saveDoc(object):
             return False
 
     def _append_chapters(self, doc):
-        """在 Word 文档末尾追加新章节（第7-9章）"""
+        """在 Word 文档末尾追加新章节（第17-19章）"""
         from docx.oxml.ns import qn as _qn
+
+        def _set_cell_bg(cell, hex_color):
+            from docx.oxml.ns import nsdecls
+            from docx.oxml import parse_xml
+            shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
+            cell._tc.get_or_add_tcPr().append(shading)
 
         def _add_heading(text, level=1):
             h = doc.add_heading(text, level=level)
@@ -977,40 +1372,57 @@ class saveDoc(object):
                 run.font.name = '微软雅黑'
                 run._element.rPr.rFonts.set(_qn('w:eastAsia'), '微软雅黑')
                 run.font.color.rgb = RGBColor(0, 51, 102)
+                if level == 1:
+                    run.font.size = Pt(14)       # 四号（章标题）
+                else:
+                    run.font.size = Pt(12)       # 小四号（子标题）
             return h
 
         def _add_table(headers, rows):
             t = doc.add_table(rows=max(1,len(rows))+1, cols=len(headers), style='Table Grid')
             for j, h in enumerate(headers):
                 cell = t.cell(0, j); cell.text = h
-                for p in cell.paragraphs: p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                _set_cell_bg(cell, 'DCE6F1')     # 表头浅蓝底
+                for p in cell.paragraphs:
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    for run in p.runs:
+                        run.font.size = Pt(9)    # 小五号
+                        run.font.name = '微软雅黑'
+                        run.bold = True
             for i, row_data in enumerate(rows):
                 for j, val in enumerate(row_data):
-                    t.cell(i+1, j).text = str(val)[:200] if val else ''
+                    c = t.cell(i+1, j)
+                    c.text = str(val)[:200] if val else ''
+                    for p in c.paragraphs:
+                        for run in p.runs:
+                            run.font.size = Pt(9)  # 小五号
+                            run.font.name = '微软雅黑'
+                    c.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
             return t
 
-        # 第7章 风险与建议
-        _add_heading("第7章 风险与建议")
+        # 第17章 风险与建议（原Ch16）
+        _add_heading("第17章 风险与建议")
         issues = self.context.get("auto_analyze", [])
         if issues:
-            _add_heading("7.1 问题明细", 2)
+            _add_heading("17.1 问题明细", 2)
             _add_table(["序号", "项目", "风险等级", "问题描述", "严重程度", "责任人", "修复建议"],
                        [(str(i+1), x.get('col1',''), x.get('col2',''), x.get('col3',''),
                          x.get('col4',''), x.get('col5',''), x.get('fix_sql','')[:200]) for i,x in enumerate(issues)])
 
             fix_sqls = [(x.get('col1',''), x.get('fix_sql','')) for x in issues if x.get('fix_sql')]
             if fix_sqls:
-                _add_heading("7.2 修复SQL速查", 2)
+                _add_heading("17.2 修复SQL速查", 2)
                 for fname, sql in fix_sqls:
                     p = doc.add_paragraph(); p.add_run(f"【{fname}】").bold = True
                     doc.add_paragraph(sql, style='List Bullet')
         else:
-            doc.add_paragraph("未发现明显风险项，数据库整体运行状况良好 👍")
+            p = doc.add_paragraph("未发现明显风险项，数据库整体运行状况良好")
+            for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
 
-        # 第8章 AI 诊断
+        # 第18章 AI 诊断（原Ch17）
         ai_text = self.context.get('ai_advice', '')
         if ai_text:
-            _add_heading("第8章 AI 诊断建议")
+            _add_heading("第18章 AI 诊断建议")
             for line in ai_text.split('\n'):
                 if line.startswith('# '): _add_heading(line[2:], level=2)
                 elif line.startswith('## '): _add_heading(line[3:], level=3)
@@ -1021,19 +1433,25 @@ class saveDoc(object):
                 elif line.strip():
                     doc.add_paragraph(line)
 
-        # 第9章 报告说明（与 PostgreSQL 格式一致）
-        _add_heading("第9章 报告说明")
+        # 第19章 报告说明（编号段落形式，更易阅读）
+        _add_heading("第19章 报告说明")
         notes = [
-            "1. 本报告基于 Oracle 数据库实时状态生成，反映了生成时刻的数据库健康状况",
-            "2. 报告中空白的项表示未能获取到相关数据，可能是由于权限限制或该功能未启用",
-            "3. 磁盘信息仅显示主要分区的使用率，如需查看完整磁盘信息请使用系统命令 'df -h'",
-            "4. 巡检结果仅供参考，实际运维中请结合具体业务场景进行分析",
-            "5. 建议定期进行数据库巡检，及时发现并解决潜在问题",
-            "6. AI 诊断功能（若启用）生成的建议仅供参考，不构成专业 DBA 意见"
+            "本报告基于 Oracle 数据库实时状态生成，反映了生成时刻的数据库健康状况。",
+            "报告中空白的项表示未能获取到相关数据，可能是由于权限限制或该功能未启用。",
+            "磁盘信息仅显示主要分区的使用率，如需查看完整磁盘信息请使用系统命令 'df -h'。",
+            "巡检结果仅供参考，实际运维中请结合具体业务场景进行分析。",
+            "建议定期进行数据库巡检，及时发现并解决潜在问题。",
+            "AI 诊断功能（若启用）生成的建议仅供参考，不构成专业 DBA 意见。"
         ]
-        for note in notes:
-            p = doc.add_paragraph(note)
-            p.runs[0].font.size = Pt(10) if p.runs else None
+        # 全文五号字体(10.5pt)，1.5倍行距
+        for idx, text in enumerate(notes, 1):
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(6)
+            p.paragraph_format.line_spacing = 1.5
+            run = p.add_run(f"{idx}. {text}")
+            run.font.name = '微软雅黑'
+            run._element.rPr.rFonts.set(_qn('w:eastAsia'), '微软雅黑')
+            run.font.size = Pt(10.5)
 
     def _fallback_render(self):
         """增强备用渲染（docxtpl 失败时使用，兼容预格式化的字符串数据）"""
@@ -1041,35 +1459,87 @@ class saveDoc(object):
             doc = Document()
             from docx.oxml.ns import qn as _qn
 
+            def _set_cell_bg(cell, hex_color):
+                """设置单元格背景色"""
+                from docx.oxml.ns import nsdecls
+                from docx.oxml import parse_xml
+                shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
+                cell._tc.get_or_add_tcPr().append(shading)
+
+            def _beautify_table(tbl, is_info=False):
+                """美化表格：表头浅蓝底+加粗，字段列(信息表)浅灰"""
+                for ri, row in enumerate(tbl.rows):
+                    for ci, cell in enumerate(row.cells):
+                        if ri == 0:          # 表头
+                            _set_cell_bg(cell, 'DCE6F1')
+                            cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        elif is_info and ci == 0:
+                            _set_cell_bg(cell, 'F2F2F2')   # 信息表字段列浅灰
+                            cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        else:
+                            cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+
             def _h(text, lvl=1):
+                """章节标题（四号14pt）"""
                 hh = doc.add_heading(text, level=lvl)
                 for r in hh.runs:
                     r.font.name = '微软雅黑'; r._element.rPr.rFonts.set(_qn('w:eastAsia'), '微软雅黑'); r.font.color.rgb = RGBColor(0,51,102)
+                    r.font.size = Pt(14)       # 四号字体
                 return hh
 
+            def _set_cell_font(cell, size=Pt(9)):
+                """设置表格单元格字体为小五号(9pt) 微软雅黑"""
+                for p in cell.paragraphs:
+                    for run in p.runs:
+                        run.font.name = '微软雅黑'
+                        run._element.rPr.rFonts.set(_qn('w:eastAsia'), '微软雅黑')
+                        run.font.size = size
+
             def _t(hdr, rows):
-                tt = doc.add_table(rows=max(1,len(rows))+1, cols=len(hdr), style='Table Grid')
+                """创建表格：小五号字体+自动适配行列数+自动美化"""
+                if not rows:
+                    return
+                max_cols = max(len(hdr), *(len(r) for r in rows))
+                tt = doc.add_table(rows=max(1,len(rows))+1, cols=max_cols, style='Table Grid')
                 for j,h in enumerate(hdr):
-                    c=tt.cell(0,j); c.text=h; [p.__setattr__('alignment', WD_ALIGN_PARAGRAPH.CENTER) for p in c.paragraphs]
+                    c=tt.cell(0,j); c.text=h; [p.__setattr__('alignment', WD_ALIGN_PARAGRAPH.CENTER) for p in c.paragraphs]; _set_cell_font(c)
                 for i,row in enumerate(rows):
-                    for j,v in enumerate(row): tt.cell(i+1,j).text=str(v)[:200] if v else ''
+                    for j,v in enumerate(row):
+                        if j < max_cols:
+                            tt.cell(i+1,j).text=str(v)[:200] if v else ''
+                            _set_cell_font(tt.cell(i+1,j))
+                _beautify_table(tt)    # 自动美化
 
             def _render(key, title=None, max_r=50):
+                """统一渲染函数：TSV字符串/字典列表均转为表格"""
                 val = self.context.get(key)
-                if not val: return
-                if isinstance(val, str) and val != '无数据':
-                    if title: _h(title)
-                    doc.add_paragraph(val[:5000])
+                if not val or val == '无数据' or (isinstance(val, str) and not val.strip()):
+                    return
+                if title: _h(title)
+                # 预格式化的 TSV 字符串 → 解析为表格
+                if isinstance(val, str) and '\n' in val:
+                    lines = val.strip().split('\n')
+                    hdrs = [h.strip() for h in lines[0].split('\t')]
+                    rows = [[v.strip() for v in line.split('\t')] for line in lines[1:]]
+                    if rows:
+                        _t(hdrs, rows[:max_r])
+                    else:
+                        p_nd = doc.add_paragraph("暂无数据")
+                        for r in p_nd.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
+                # 原始字典列表（未预格式化的兜底）
                 elif isinstance(val, (list,tuple)) and len(val)>0 and isinstance(val[0], dict):
-                    if title: _h(title)
                     hdrs = list(val[0].keys())
                     _t(hdrs, [list(d.values()) for d in val[:max_r]])
 
             ctx = self.context
 
-            # ── 封面：8行信息表（与 PG 格式一致）──
-            doc.add_heading("Oracle 数据库健康巡检报告", 0)
-            info_t = doc.add_table(rows=8, cols=2, style='Light Grid Accent 1')
+            # ── 封面：标题(二号22pt) + 8行信息表（字段列浅灰+值列白色）──
+            cover_title = doc.add_heading("Oracle 数据库健康巡检报告", 0)
+            for r in cover_title.runs:
+                r.font.name = '微软雅黑'; r._element.rPr.rFonts.set(_qn('w:eastAsia'), '微软雅黑')
+                r.font.size = Pt(22)       # 二号字体
+                r.bold = True
+            info_t = doc.add_table(rows=8, cols=2, style='Table Grid')
             info_rows = [
                 ("数据库名称", str(ctx.get('co_name', ''))),
                 ("服务器地址", str(ctx.get('server_addr', ''))),
@@ -1082,80 +1552,135 @@ class saveDoc(object):
             ]
             for i,(k,v) in enumerate(info_rows):
                 info_t.cell(i,0).text = k; info_t.cell(i,1).text = v
+                _set_cell_font(info_t.cell(i,0)); _set_cell_font(info_t.cell(i,1))
+            _beautify_table(info_t, is_info=True)   # 美化信息表
 
-            # Ch1
+            # Ch1 数据库基本信息（保持不变）
             _h("第1章 数据库基本信息")
             _render('ora_database')
             _render('ora_uptime')
 
-            # Ch2
-            _h("第2章 实例与运行状态")
+            # Ch2 巡检执行摘要（健康评分 + SQL执行情况）
+            _h("第2章 巡检执行摘要")
+            hst = ctx.get('health_summary_text', '')
+            if hst and isinstance(hst, str) and hst.strip():
+                hl = [l.strip() for l in hst.strip().split('\n') if l.strip()]
+                if len(hl) >= 2:
+                    hdrs2 = ["项目", "评分/数值", "状态", "详情"]
+                    hr = []
+                    for ln in hl[:2]:
+                        cols = [c.strip() for c in ln.split('\t')]
+                        hr.append(cols)
+                    _t(hdrs2, hr)
+                # 各维度得分表（从第3行开始）
+                dim_lines = hl[2:] if len(hl) > 2 else []
+                if dim_lines:
+                    doc.add_paragraph("")  # 空行分隔
+                    p2 = doc.add_paragraph(); r2 = p2.add_run("各维度详细评估"); r2.bold = True; r2.font.size = Pt(10.5); r2.font.name='微软雅黑'
+                    dhdr = ["检查维度", "扣分", "等级", "说明"]
+                    drows = []
+                    for dl in dim_lines:
+                        dcols = [c.strip() for c in dl.split('\t')]
+                        drows.append(dcols)
+                    _t(dhdr, drows)
+
+            # SQL 执行情况（统计汇总表 + 错误明细表，两个独立表格）
+            est = ctx.get('error_stats_text', '')
+            if est and isinstance(est, str) and est.strip():
+                doc.add_paragraph("")
+                p3 = doc.add_paragraph(); r3 = p3.add_run("SQL 执行情况"); r3.bold = True; r3.font.size = Pt(12); r3.font.name='微软雅黑'
+                # 统计汇总表
+                el = [l.strip() for l in est.strip().split('\n') if l.strip()]
+                if el:
+                    _t(["项目", "数值"], [c.split('\t') for c in el])
+                # 错误明细表（仅在有失败时输出）
+                edt = ctx.get('error_detail_text', '')
+                if edt and edt != '-' and isinstance(edt, str):
+                    doc.add_paragraph("")
+                    dlines = [l.strip() for l in edt.strip().split('\n') if l.strip()]
+                    if len(dlines) > 1:
+                        _t(["SQL名称", "错误码", "修复建议"], [l.split('\t') for l in dlines[1:] if l.count('\t') >= 2])
+
+            # Ch3 实例与运行状态（原Ch2）
+            _h("第3章 实例与运行状态")
             _render('ora_instance')
             _render('ora_database')
             _render('ora_uptime')
 
-            # Ch3 表空间
-            _h("第3章 表空间使用情况")
+            # Ch4 表空间（原Ch3）
+            _h("第4章 表空间使用情况")
             _render('ora_tablespace', None, 30)
             _render('ora_temp_ts')
 
-            # Ch4 SGA/PGA
-            _h("第4章 SGA/PGA 内存分析")
+            # Ch5 SGA/PGA（原Ch4）
+            _h("第5章 SGA/PGA 内存分析")
             _render('ora_sga_total')
             _render('ora_sga', None, 15)
             _render('ora_pga')
 
-            # Ch5 会话锁
-            _h("第5章 会话与锁等待")
+            # Ch6 会话锁（原Ch5）
+            _h("第6章 会话与锁等待")
             _render('ora_sessions')
             _render('ora_blocked', None, 20)
 
-            # Ch6 Redo/归档
-            _h("第6章 Redo 日志与归档")
+            # Ch7 Redo/归档（原Ch6）
+            _h("第7章 Redo 日志与归档")
             _render('ora_redo_logs')
             _render('ora_archive_lag')
 
-            # Ch7 系统资源
-            _h("第7章 系统资源监控")
+            # Ch8 系统资源（表格化）（原Ch7）
+            _h("第8章 系统资源监控")
             stx = ctx.get('system_info_text')
-            if stx: doc.add_paragraph(stx)
+            if stx and isinstance(stx, str) and stx.strip():
+                # 解析 system_info_text 为表格：CPU行 + 内存行 + 各磁盘分区行
+                lines = [l.strip() for l in stx.strip().split('\n') if l.strip()]
+                sys_rows = []
+                for ln in lines:
+                    if ':' in ln:
+                        parts = ln.split(':', 1)
+                        sys_rows.append([parts[0].strip(), parts[1].strip()])
+                    elif '\t' in ln:
+                        cols = [c.strip() for c in ln.split('\t')]
+                        sys_rows.append(cols)
+                if sys_rows:
+                    _t(["项目", "详情/数值"], sys_rows)
 
             # Ch8 归档备份
             ha = ctx.get('ora_archive_dest') and str(ctx['ora_archive_dest']) not in ('无数据','')
             hb = ctx.get('ora_backup') and str(ctx['ora_backup']) not in ('无数据','')
             if ha or hb:
-                _h("第8章 归档与备份信息")
+                _h("第9章 归档与备份信息")
                 _render('ora_archive_dest'); _render('ora_archive_lag'); _render('ora_backup')
 
             # Ch9 Data Guard
             dg_v = ctx.get('ora_dg_status')
             if dg_v and str(dg_v) not in ('无数据',''):
-                _h("第9章 Data Guard / ADG 状态")
+                _h("第10章 Data Guard / ADG 状态")
                 _render('ora_dg_status'); _render('ora_dg_apply')
 
             # Ch10 ASM
             av = ctx.get('ora_asm_diskgroup')
             if av and str(av) not in ('无数据',''):
-                _h("第10章 ASM 磁盘组"); _render('ora_asm_diskgroup')
+                _h("第11章 ASM 磁盘组"); _render('ora_asm_diskgroup')
 
-            # Ch11 用户安全
-            _h("第11章 对象与用户安全")
+            # Ch12 用户安全（原Ch11）
+            _h("第12章 对象与用户安全")
             for k in ['ora_invalid_cnt','ora_users','ora_default_pws','ora_sys_privs']:
                 _render(k, None, 50)
 
-            # Ch12 参数
-            _h("第12章 关键参数"); _render('ora_params', None, 30)
+            # Ch13 参数（原Ch12）
+            _h("第13章 关键参数"); _render('ora_params', None, 30)
 
-            # Ch13 无效对象
+            # Ch14 无效对象（原Ch13）
             iv = ctx.get('ora_invalid_objs')
             if iv and str(iv) not in ('无数据',''):
-                _h("第13章 无效对象详情"); _render('ora_invalid_objs', None, 30)
+                _h("第14章 无效对象详情"); _render('ora_invalid_objs', None, 30)
 
-            # Ch14 Top SQL
-            _h("第14章 TOP SQL")
+            # Ch15 Top SQL（原Ch14）
+            _h("第15章 TOP SQL")
             _render('ora_top_sql_cpu', None, 15); _render('ora_long_sql', None, 15)
 
-            # Ch15 其他诊断
+            # Ch16 其他诊断（原Ch15）
             _h("第15章 其他诊断信息")
             for k2 in ['ora_top_waits','ora_wait_class','ora_stale_stats',
                         'ora_partition_info','ora_undo_info','ora_recyclebin',
@@ -1448,33 +1973,13 @@ def single_inspection():
 
 
 def batch_inspection():
-    print("\n--- 批量巡检 ---")
+    print("\n--- 批量巡检（含 Excel 汇总报告） ---")
     excel_path = input("Excel 模板路径 (或回车创建新模板): ").strip()
     if not excel_path or not os.path.exists(excel_path):
         create_excel_template()
         excel_path = input("Excel 路径: ").strip()
 
-    try:
-        wb = openpyxl.load_workbook(excel_path)
-        ws = wb.active
-        success_count = 0
-        for row_idx in range(2, ws.max_row + 1):
-            name = ws.cell(row=row_idx, column=1).value
-            ip = ws.cell(row=row_idx, column=2).value
-            port = ws.cell(row=row_idx, column=3).value or 1521
-            user = ws.cell(row=row_idx, column=4).value or 'system'
-            pwd = ws.cell(row=row_idx, column=5).value
-            svc = ws.cell(row=row_idx, column=6).value or ip
-            if not name or not ip:
-                continue
-            db_info = {'name': str(name), 'ip': str(ip), 'port': int(port),
-                       'user': str(user), 'password': str(pwd) if pwd else ''}
-            print(f"\n{'='*40}\n巡检 [{name}] ({ip}:{port})\n{'='*40}")
-            ok = run_inspection(db_info, service_name=str(svc))
-            if ok: success_count += 1
-        print(f"\n批量巡检完成: {success_count} / {(ws.max_row - 1)} 个成功")
-    except Exception as e:
-        print(f"批量巡检异常: {e}")
+    run_batch_inspection_with_summary(excel_path)
 
 
 def create_excel_template():
@@ -1490,6 +1995,402 @@ def create_excel_template():
     ws.column_dimensions['C'].width = 8; ws.column_dimensions['D'].width = 12
     ws.column_dimensions['E'].width = 15; ws.column_dimensions['F'].width = 15
     wb.save(path); print(f"\n✅ Excel 模板已创建: {path}")
+
+
+# ============================================================
+# 批量巡检 Excel 汇总报告（借鉴 Oracledbcheck 汇总设计）
+# ============================================================
+
+def generate_oracle_summary_excel(batch_results, output_path=None):
+    """
+    根据批量巡检结果生成汇总 Excel 报告（3 个工作表）。
+
+    Sheet1: 数据库概览 — 每库一行，健康状态+告警数+评分
+    Sheet2: 表空间详情 — 所有数据库的表空间合并展示，自动标记状态
+    Sheet3: 主机资源   — 磁盘/内存/CPU 横向对比
+
+    Args:
+        batch_results: list of dict, 每个 dict 包含:
+            {
+                "name": str,          # 实例标签
+                "ip": str,
+                "port": int,
+                "context": dict,      # checkdb() 返回的完整 context
+                "success": bool,
+                "error_msg": str or None
+            }
+        output_path: 输出文件路径（默认 reports/oracle_汇总报告_时间戳.xlsx）
+
+    Returns:
+        str: 生成的文件路径
+    """
+    if output_path is None:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_path = os.path.join("reports", f"Oracle_汇总报告_{timestamp}.xlsx")
+
+    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+
+    # ── 样式定义 ──
+    header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    critical_fill = PatternFill(start_color="FF6B6B", end_color="FF6B6B", fill_type="solid")  # 红色-紧急
+    warning_fill = PatternFill(start_color="FFE066", end_color="FFE066", fill_type="solid")  # 黄色-关注
+    ok_fill = PatternFill(start_color="69DB7C", end_color="69DB7C", fill_type="solid")      # 绿色-正常
+    normal_font = Font(size=9)
+    thin_border = openpyxl.styles.Border(
+        left=openpyxl.styles.Side(style='thin'),
+        right=openpyxl.styles.Side(style='thin'),
+        top=openpyxl.styles.Side(style='thin'),
+        bottom=openpyxl.styles.Side(style='thin')
+    )
+
+    def _apply_header(ws, row=1):
+        for cell in ws[row]:
+            cell.fill = header_fill; cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+
+    def _write_cell(ws, row, col, value, fill=None):
+        c = ws.cell(row=row, column=col, value=value)
+        c.font = normal_font; c.alignment = Alignment(horizontal='center', vertical='center')
+        c.border = thin_border
+        if fill: c.fill = fill
+
+    # ── 创建工作簿 ──
+    wb = Workbook()
+
+    # ════════════════════════════════════════
+    # Sheet 1: 数据库概览
+    # ════════════════════════════════════════
+    ws1 = wb.active
+    ws1.title = "数据库概览"
+    
+    headers1 = ["序号", "实例名称", "IP地址", "端口", "Oracle版本", "健康状态",
+               "评分", "紧急告警数", "警告告警数", "总告警数", "表空间最大使用率",
+               "会话总数/上限", "内存使用率", "巡检结果"]
+    for j, h in enumerate(headers1, 1): ws1.cell(1, j).value=h
+    _apply_header(ws1)
+
+    for idx, br in enumerate(batch_results, start=2):
+        ctx = br.get('context', {})
+        health = ctx.get('health_analysis', {})
+
+        # Oracle 版本
+        ver = 'Unknown'
+        if isinstance(ctx.get('ora_version'), list) and len(ctx['ora_version']) > 0:
+            ver = str(ctx['ora_version'][0].get('BANNER', '') or 'Unknown')[:30]
+        elif isinstance(ctx.get('ora_version'), str):
+            ver = ctx['ora_version'][:30]
+
+        # 健康状态 & 评分
+        status = health.get('status', '-')
+        score = health.get('score', 0)
+        crit_cnt = health.get('critical_count', 0)
+        warn_cnt = health.get('warning_count', 0)
+
+        # 表空间最大使用率
+        max_ts_pct = 0
+        ts_list = ctx.get('ora_tablespace', [])
+        if ts_list and isinstance(ts_list, list):
+            for ts in ts_list:
+                if isinstance(ts, dict):
+                    p = _safe_float_val(ts.get('used_pct_with_maxext') or ts.get('used_pct', 0))
+                    max_ts_pct = max(max_ts_pct, p)
+
+        # 会话信息
+        sess_info = '-'
+        sess = ctx.get('ora_sessions', [])
+        slimit = ctx.get('ora_session_limit', [])
+        if sess and slimit and isinstance(sess, list) and isinstance(slimit, list):
+            try:
+                total = _safe_int_val(sess[0].get('TOTAL_SESSIONS', 0))
+                mx = _safe_int_val(slimit[0].get('SESSIONS_LIMIT', 0))
+                if mx > 0:
+                    sess_info = f"{total}/{mx}"
+                    pct_val = round(total * 100 / mx, 0)
+                else:
+                    sess_info = str(total)
+            except (IndexError, KeyError):
+                if sess and isinstance(sess[0], dict):
+                    sess_info = str(_safe_int_val(sess[0].get('TOTAL_SESSIONS', 0)))
+        elif sess and isinstance(sess, list) and len(sess) > 0 and isinstance(sess[0], dict):
+            sess_info = str(_safe_int_val(sess[0].get('TOTAL_SESSIONS', 0)))
+
+        # 内存使用率
+        mem_pct = 0
+        sys_i = ctx.get('system_info', {})
+        if isinstance(sys_i, dict) and isinstance(sys_i.get('memory'), dict):
+            mem_pct = _safe_float_val(sys_i['memory'].get('usage_percent', 0))
+
+        # 状态颜色
+        if not br.get('success'):
+            status_fill = critical_fill
+            status_text = "❌ 失败"
+        elif status == '严重':
+            status_fill = critical_fill
+            status_text = f"⚠️ {status} ({score})"
+        elif status == '警告':
+            status_fill = warning_fill
+            status_text = f"🔶 {status} ({score})"
+        else:
+            status_fill = ok_fill
+            status_text = f"✅ {status} ({score})"
+
+        row_data = [
+            idx - 1, br.get('name', '-'), br.get('ip', '-'), br.get('port', '-'),
+            ver, status_text, score, crit_cnt, warn_cnt, crit_cnt + warn_cnt,
+            f"{max_ts_pct:.1f}%", sess_info, f"{mem_pct:.1f}%",
+            "成功" if br.get('success') else br.get('error_msg', '失败')
+        ]
+        for col, val in enumerate(row_data, 1):
+            fill = status_fill if col == 6 else None
+            _write_cell(ws1, idx, col, val, fill)
+
+    # 列宽
+    widths1 = [6, 16, 15, 7, 28, 14, 7, 11, 11, 9, 17, 16, 12, 20]
+    for i, w in enumerate(widths1, 1): ws1.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    # ════════════════════════════════════════
+    # Sheet 2: 表空间详情（所有库合并）
+    # ════════════════════════════════════════
+    ws2 = wb.create_sheet("表空间详情")
+    headers2 = ["实例名称", "表空间名", "状态", "类型", "管理方式",
+                "总大小(MB)", "已用(MB)", "剩余(MB)", "使用率(%)",
+                "含扩展最大(MB)", "含扩展使用率(%)", "评估"]
+    for j, h in enumerate(headers2, 1): ws2.cell(1, j).value=h
+    _apply_header(ws2)
+
+    s2_row = 2
+    for br in batch_results:
+        db_name = br.get('name', '-')
+        if not br.get('success'): continue
+        ctx = br.get('context', {})
+        ts_list = ctx.get('ora_tablespace', [])
+        if not ts_list or not isinstance(ts_list, list): continue
+
+        for ts in ts_list:
+            if not isinstance(ts, dict): continue
+            
+            ts_name = ts.get('TABLESPACE_NAME', ts.get('tablespace_name', '-'))
+            used_pct = _safe_float_val(ts.get('used_pct', 0))
+            used_pct_maxext = _safe_float_val(ts.get('used_pct_with_maxext', 0))
+            
+            # 自动评估
+            if used_pct >= 95:
+                assess = "🔴 紧急扩容"
+                assess_fill = critical_fill
+            elif used_pct >= 85:
+                assess = "🟡 需关注"
+                assess_fill = warning_fill
+            else:
+                assess = "🟢 正常"
+                assess_fill = ok_fill
+
+            row_data = [
+                db_name,
+                ts_name,
+                ts.get('STATUS', ts.get('status', '-')),
+                ts.get('CONTENTS', ts.get('contents', '-')),
+                ts.get('SEGMENT_SPACE_MANAGEMENT', ts.get('segment_space_management', '-')),
+                _safe_float_val(ts.get('TOTAL_MB', ts.get('total_mb', 0)), 0),
+                _safe_float_val(ts.get('USED_MB', ts.get('used_mb', 0)), 0),
+                _safe_float_val(ts.get('FREE_MB', ts.get('free_mb', 0)), 0),
+                round(used_pct, 1),
+                _safe_float_val(ts.get('MAX_BYTES', ts.get('max_bytes', 0), 0) / 1024 / 1024, 0),
+                round(used_pct_maxext, 1),
+                assess
+            ]
+            for col, val in enumerate(row_data, 1):
+                fill = assess_fill if col == 12 else None
+                _write_cell(ws2, s2_row, col, val, fill)
+            s2_row += 1
+
+    if s2_row == 2:
+        # 无数据时写入提示
+        for col in range(1, 13):
+            _write_cell(ws2, 2, col, "无有效数据" if col==1 else "")
+
+    widths2 = [14, 18, 8, 10, 16, 13, 12, 12, 11, 18, 16, 14]
+    for i, w in enumerate(widths2, 1): ws2.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    # 冻结首行
+    ws2.freeze_panes = 'A2'
+
+    # ════════════════════════════════════════
+    # Sheet 3: 主机资源（横向对比）
+    # ════════════════════════════════════════
+    ws3 = wb.create_sheet("主机资源")
+    headers3 = ["实例名称", "IP地址", "主机名", "操作系统平台",
+                "CPU 使用率(%)", "内存总量(MB)", "内存已用(MB)", "内存使用率(%)",
+                "磁盘挂载点", "磁盘总量(GB)", "磁盘已用(GB)", "磁盘剩余(GB)", "磁盘使用率(%)"]
+    for j, h in enumerate(headers3, 1): ws3.cell(1, j).value=h
+    _apply_header(ws3)
+
+    s3_row = 2
+    for br in batch_results:
+        db_name = br.get('name', '-')
+        ip_addr = br.get('ip', '-')
+        if not br.get('success'): 
+            _write_cell(ws3, s3_row, 1, db_name, critical_fill)
+            _write_cell(ws3, s3_row, 2, ip_addr)
+            _write_cell(ws3, s3_row, 3, "-")
+            _write_cell(ws3, s3_row, 4, "巡检失败")
+            s3_row += 1
+            continue
+        
+        ctx = br.get('context', {})
+        sys_i = ctx.get('system_info', {})
+        if not isinstance(sys_i, dict):
+            sys_i = {}
+
+        hostname = str(sys_i.get('hostname', '-'))
+        platform_str = sys_i.get('platform', {})
+        if isinstance(platform_str, dict):
+            plat = platform_str.get('platform', '')
+            arch = platform_str.get('machine', '')
+            plat_text = f"{plat} ({arch})"
+        else:
+            plat_text = str(platform_str) if platform_str else '-'
+
+        cpu_info = sys_i.get('cpu', {}) or {}
+        cpu_pct = _safe_float_val(cpu_info.get('usage_percent', 0))
+
+        mem_info = sys_i.get('memory', {}) or {}
+        mem_total = _safe_float_val(mem_info.get('total_mb', 0))
+        mem_used = _safe_float_val(mem_info.get('used_mb', 0))
+        mem_pct = _safe_float_val(mem_info.get('usage_percent', 0))
+
+        disks = sys_i.get('disk_list', []) or []
+        if disks and isinstance(disks, list):
+            for d_idx, d in enumerate(disks):
+                if not isinstance(d, dict): continue
+                mp = d.get('mountpoint', '/')
+                
+                # 第一行写入主机基本信息
+                disk_total = _safe_float_val(d.get('total_gb', 0))
+                disk_used = _safe_float_val(d.get('used_gb', 0))
+                disk_free = _safe_float_val(d.get('free_gb', 0))
+                disk_pct = _safe_float_val(d.get('usage_percent', 0))
+
+                d_fill = critical_fill if disk_pct >= 95 else (warning_fill if disk_pct >= 90 else None)
+
+                base_cols = [db_name, ip_addr, hostname, plat_text,
+                            round(cpu_pct, 1), round(mem_total, 1), round(mem_used, 1), round(mem_pct, 1)]
+                disk_cols = [mp, round(disk_total, 2), round(disk_used, 2),
+                             round(disk_free, 2), round(disk_pct, 1)]
+
+                if d_idx == 0:
+                    for col, val in enumerate(base_cols + disk_cols, 1):
+                        _write_cell(ws3, s3_row, col, val, d_fill if col >= 9 else None)
+                else:
+                    # 同一主机的后续磁盘只写磁盘列
+                    for col in range(1, 9):
+                        _write_cell(ws3, s3_row, col, "")
+                    for col, val in enumerate(disk_cols, 9):
+                        _write_cell(ws3, s3_row, col, val, d_fill)
+                s3_row += 1
+        else:
+            # 无磁盘数据
+            _write_cell(ws3, s3_row, 1, db_name)
+            _write_cell(ws3, s3_row, 2, ip_addr)
+            _write_cell(ws3, s3_row, 3, hostname)
+            _write_cell(ws3, s3_row, 4, plat_text)
+            _write_cell(ws3, s3_row, 5, round(cpu_pct, 1))
+            _write_cell(ws3, s3_row, 6, round(mem_total, 1))
+            _write_cell(ws3, s3_row, 7, round(mem_used, 1))
+            _write_cell(ws3, s3_row, 8, round(mem_pct, 1))
+            for col in range(9, 14):
+                _write_cell(ws3, s3_row, col, "")
+            s3_row += 1
+
+    if s3_row == 2:
+        for col in range(1, 14):
+            _write_cell(ws3, 2, col, "无有效数据" if col==1 else "")
+
+    widths3 = [14, 14, 16, 24, 12, 13, 13, 12, 14, 12, 12, 12, 12]
+    for i, w in enumerate(widths3, 1): ws3.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    ws3.freeze_panes = 'A2'
+
+    # ── 保存 ──
+    wb.save(output_path)
+    return output_path
+
+
+def run_batch_inspection_with_summary(excel_path):
+    """
+    增强版批量巡检：逐个执行并收集结果，最终自动生成汇总报告。
+    （供内部调用或 CLI 直接使用）
+    """
+    try:
+        wb = openpyxl.load_workbook(excel_path)
+        ws = wb.active
+        batch_results = []
+        
+        for row_idx in range(2, ws.max_row + 1):
+            name = ws.cell(row=row_idx, column=1).value
+            ip = ws.cell(row=row_idx, column=2).value
+            port = ws.cell(row=row_idx, column=3).value or 1521
+            user = ws.cell(row=row_idx, column=4).value or 'system'
+            pwd = ws.cell(row=row_idx, column=5).value
+            svc = ws.cell(row=row_idx, column=6).value or ip
+            if not name or not ip:
+                continue
+            db_info = {'name': str(name), 'ip': str(ip), 'port': int(port),
+                       'user': str(user), 'password': str(pwd) if pwd else ''}
+
+            result_entry = {
+                'name': name, 'ip': ip, 'port': int(port),
+                'context': {}, 'success': False, 'error_msg': None
+            }
+            
+            print(f"\n{'='*50}\n📋 [{name}] ({ip}:{port}/{svc})\n{'='*50}")
+            try:
+                inspector_name = input(f"  巡检人员 [{name}] (回车跳过): ").strip() or "DBA"
+                data = getData(ip, port, user, pwd, service_name=str(svc))
+                if data is None or data.conn_db2 is None:
+                    result_entry['error_msg'] = "连接失败"
+                    batch_results.append(result_entry)
+                    print(f"  ❌ 连接失败: {ip}:{port}")
+                    continue
+                
+                ret = data.checkdb('builtin')
+                ret.update({"co_name": [{'CO_NAME': name}]})
+                ret.update({"port": [{'PORT': port}]})
+                ret.update({"ip": [{'IP': ip}]})
+                result_entry['context'] = ret
+                result_entry['success'] = True
+
+                # 单独生成 Word 报告
+                ifile = create_word_template(inspector_name)
+                dir_path = "reports"
+                os.makedirs(dir_path, exist_ok=True)
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                ofile = os.path.join(dir_path, f"Oracle巡检报告_{name}_{timestamp}.docx")
+                savedoc = saveDoc(context=ret, ofile=ofile, ifile=ifile, inspector_name=inspector_name)
+                savedoc.contextsave()
+                print(f"  ✅ Word: {ofile}")
+                
+                try:
+                    if os.path.exists(ifile): os.remove(ifile)
+                except Exception: pass
+                    
+            except Exception as e:
+                result_entry['error_msg'] = str(e)[:200]
+                print(f"  ❌ 异常: {e}")
+            
+            batch_results.append(result_entry)
+
+        # 生成汇总报告
+        print(f"\n{'='*50}\n📊 正在生成 Excel 汇总报告...\n{'='*50}")
+        summary_path = generate_oracle_summary_excel(batch_results)
+        print(f"\n✅ 批量巡检完成！")
+        print(f"   成功: {sum(1 for r in batch_results if r['success'])} / {len(batch_results)}")
+        print(f"   📊 汇总报告: {summary_path}")
+        return batch_results, summary_path
+
+    except Exception as e:
+        print(f"批量巡检异常: {e}")
+        return [], None
 
 
 def check_license():
