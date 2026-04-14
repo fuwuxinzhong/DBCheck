@@ -68,6 +68,22 @@ def test_pg_connection(host, port, user, password, database='postgres'):
         return False, str(e)
 
 
+def test_dm_connection(host, port, user, password):
+    """测试达梦 DM8 连接，返回 (ok: bool, msg: str)"""
+    try:
+        import dmPython
+        conn = dmPython.connect(user=user, password=password,
+                                server=host, port=int(port))
+        cur = conn.cursor()
+        cur.execute("SELECT STATUS$ FROM V$INSTANCE")
+        ver = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return True, f"DM8 {ver}"
+    except Exception as e:
+        return False, str(e)
+
+
 def test_oracle_connection(host, port, user, password, service_name=None):
     """测试 Oracle 连接，返回 (ok: bool, msg: str)
     支持 'sys as sysdba' / 'sys as sysoper' 等特权身份
@@ -523,6 +539,121 @@ def run_oracle_task(task_id, db_info, inspector_name):
         task['error'] = str(e)
 
 
+def run_dm_task(task_id, db_info, inspector_name):
+    """在后台线程中执行达梦 DM8 巡检"""
+    task = tasks[task_id]
+    log = task['log']
+
+    def emit(msg):
+        log.append(msg)
+        task['last_update'] = time.time()
+
+    try:
+        emit(f"[{_ts()}] ▶ 开始 DM8 巡检: {db_info['name']}")
+        task['status'] = 'running'
+
+        import main_dm as mod
+
+        class _FakeInfos:
+            label = db_info.get('name', 'DBCheck')
+            sqltemplates = 'builtin'
+            batch = False
+        mod.infos = _FakeInfos()
+
+        emit(f"[{_ts()}] 🔍 创建报告模板...")
+        ifile = mod.create_word_template(inspector_name)
+        if not ifile:
+            raise RuntimeError("Word 模板创建失败")
+
+        dir_path = os.path.join(SCRIPT_DIR, "reports")
+        os.makedirs(dir_path, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        file_name = f"DM8巡检报告_{db_info['name']}_{timestamp}.docx"
+        ofile = os.path.join(dir_path, file_name)
+
+        emit(f"[{_ts()}] 🔍 测试数据库连接 {db_info['ip']}:{db_info['port']}...")
+        ok, ver = test_dm_connection(
+            db_info['ip'], db_info['port'], db_info['user'], db_info['password'])
+        if not ok:
+            raise RuntimeError(f"数据库连接失败: {ver}")
+        emit(f"[{_ts()}] ✅ 数据库连接成功: {ver}")
+
+        ssh_info = {}
+        if db_info.get('ssh_host'):
+            ssh_info = {k: db_info[k] for k in ('ssh_host','ssh_port','ssh_user','ssh_password','ssh_key_file') if k in db_info}
+
+        emit(f"[{_ts()}] 📊 开始执行巡检 SQL...")
+        data = mod.getData(db_info['ip'], db_info['port'], db_info['user'], db_info['password'],
+                           ssh_info=ssh_info)
+        if data is None or data.conn_db is None:
+            raise RuntimeError("无法建立数据库连接，getData 返回空")
+
+        ret = data.checkdb('builtin')
+        if not ret:
+            raise RuntimeError("巡检执行失败（checkdb 返回空）")
+
+        ret.update({"co_name": [{'CO_NAME': db_info['name']}]})
+        ret.update({"port": [{'PORT': db_info['port']}]})
+        ret.update({"ip": [{'IP': db_info['ip']}]})
+
+        # ── 增强分析 ───────────────────────────────
+        ai_advice = ''
+        try:
+            import analyzer as _analyzer_mod
+            import json as _json
+            _ai_cfg = {'backend': 'disabled', 'api_key': '', 'api_url': '', 'model': ''}
+            _ai_path = os.path.join(SCRIPT_DIR, 'ai_config.json')
+            if os.path.exists(_ai_path):
+                with open(_ai_path, 'r', encoding='utf-8') as _f:
+                    _ai_cfg = _json.load(_f)
+            run_full_analysis = _analyzer_mod.run_full_analysis
+            emit(f"[{_ts()}] 🔎 执行增强智能分析...")
+            analysis = run_full_analysis(
+                db_type='dm', host=db_info['ip'], port=db_info['port'],
+                label=db_info['name'], context=ret, base_dir=SCRIPT_DIR,
+                ai_backend=_ai_cfg.get('backend', 'disabled'),
+                ai_key=_ai_cfg.get('api_key', ''),
+                ai_url=_ai_cfg.get('api_url', ''),
+                ai_model=_ai_cfg.get('model', '')
+            )
+            ret['auto_analyze'] = analysis['issues']
+            ai_advice = analysis.get('ai_advice', '')
+            if ai_advice:
+                emit(f"[{_ts()}] 🤖 AI 诊断完成")
+            emit(f"[{_ts()}] 📈 历史记录已更新（已记录 {analysis['trend'].get('snapshots_count', 1)} 次）")
+            task['trend'] = analysis.get('trend', {})
+            task['comparison'] = analysis.get('comparison', {})
+            task['ai_advice'] = ai_advice
+        except ImportError:
+            pass
+        except Exception as ex:
+            emit(f"[{_ts()}] ⚠️  增强分析异常（不影响报告生成）: {ex}")
+
+        emit(f"[{_ts()}] 📝 正在渲染 Word 报告...")
+        savedoc = mod.saveDoc(context=ret, ofile=ofile, ifile=ifile, inspector_name=inspector_name)
+        success = savedoc.contextsave()
+
+        if success:
+            emit(f"[{_ts()}] ✅ 报告生成成功: {file_name}")
+            task['status'] = 'done'
+            task['report_file'] = ofile
+            task['report_name'] = file_name
+        else:
+            raise RuntimeError("Word 报告渲染失败")
+
+        try:
+            if os.path.exists(ifile):
+                os.remove(ifile)
+        except Exception:
+            pass
+
+    except Exception as e:
+        emit(f"[{_ts()}] ❌ 巡检失败: {e}")
+        emit(traceback.format_exc())
+        task['status'] = 'error'
+        task['error'] = str(e)
+
+
 def _ts():
     return datetime.now().strftime('%H:%M:%S')
 
@@ -551,6 +682,8 @@ def api_test_db():
         ok, msg = test_mysql_connection(host, port, user, password)
     elif db_type == 'oracle':
         ok, msg = test_oracle_connection(host, port, user, password, service_name=data.get('service_name', None))
+    elif db_type == 'dm':
+        ok, msg = test_dm_connection(host, port, user, password)
     else:
         ok, msg = test_pg_connection(host, port, user, password, database)
 
@@ -579,8 +712,8 @@ def api_start_inspection():
     inspector_name = data.get('inspector_name', 'Jack') or 'Jack'
 
     # 根据数据库类型设置默认端口
-    default_ports = {'mysql': 3306, 'pg': 5432, 'oracle': 1521}
-    default_users = {'mysql': 'root', 'pg': 'postgres', 'oracle': 'system'}
+    default_ports = {'mysql': 3306, 'pg': 5432, 'oracle': 1521, 'dm': 5236}
+    default_users = {'mysql': 'root', 'pg': 'postgres', 'oracle': 'system', 'dm': 'SYSDBA'}
 
     db_info = {
         'name':        data.get('name', f'{db_type.upper()}_Server'),
@@ -619,6 +752,8 @@ def api_start_inspection():
         target = run_mysql_task
     elif db_type == 'oracle':
         target = run_oracle_task
+    elif db_type == 'dm':
+        target = run_dm_task
     else:
         target = run_pg_task
     t = threading.Thread(target=target, args=(task_id, db_info, inspector_name), daemon=True)

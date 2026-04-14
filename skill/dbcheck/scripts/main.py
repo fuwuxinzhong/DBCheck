@@ -4,7 +4,7 @@
 ===========================
 作者: Jack Ge
 版本: v2.1
-功能: 提供 MySQL、PostgreSQL 和 Oracle 数据库巡检的统一入口
+功能: 提供 MySQL、PostgreSQL、Oracle 和达梦 DM8 数据库巡检的统一入口
 """
 
 import subprocess
@@ -46,14 +46,15 @@ def print_banner():
   ██║  ██║██╔══██╗██║     ██╔══██║██╔══╝  ██║     ██╔═██╗
   ██████╔╝██████╔╝╚██████╗██║  ██║███████╗╚██████╗██║  ██╗
   ╚═════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝{RESET}
-{BOLD}          🗄️  数据库自动化巡检工具  v2.2  统一入口{RESET}
+{BOLD}          🗄️  数据库自动化巡检工具  v2.3  统一入口{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
-{GREEN}{BOLD}    🐬  1 │ MySQL      {RESET}{DIM}MySQL 数据库健康巡检与报告生成{RESET}
-{CYAN}{BOLD}    🐘  2 │ PostgreSQL {RESET}{DIM}PostgreSQL 数据库健康巡检与报告生成{RESET}
-{RED}{BOLD}    🔴  3 │ Oracle     {RESET}{DIM}Oracle (11g/12c/19c/21c) 数据库健康巡检与报告生成{RESET}
-{YELLOW}    📋  4 │ 生成批量巡检模板{RESET}{DIM}生成 MySQL / PostgreSQL / Oracle 批量巡检 Excel 模板{RESET}
-{MAGENTA}    🌐  5 │ 启动 Web UI     {RESET}{DIM}浏览器可视化操作界面{RESET}
-{DIM}        6 │ 退出{RESET}
+{GREEN}{BOLD}    🐬  1 │ MySQL      {RESET}{DIM}MySQL 命令行巡检{RESET}
+{CYAN}{BOLD}    🐘  2 │ PostgreSQL {RESET}{DIM}PostgreSQL 命令行巡检{RESET}
+{RED}{BOLD}    🔴  3 │ Oracle     {RESET}{DIM}Oracle (11g以上版本) 命令行巡检{RESET}
+{GREEN}{BOLD}    🟡  4 │ DM8 达梦  {RESET}{DIM}达梦 DM8 数据库命令行巡检{RESET}
+{YELLOW}    📋  5 │ 生成巡检模板    {RESET}{DIM}生成批量巡检 Excel 模板{RESET}
+{MAGENTA}    🌐  6 │ 启动 Web UI     {RESET}{DIM}通过可视化界面巡检{RESET}
+{DIM}        7 │ 退出{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
 """
     print(art)
@@ -89,6 +90,16 @@ def run_oracle_inspector():
         input("\n按回车键返回...")
 
 
+def run_dm_inspector():
+    """启动达梦 DM8 巡检工具"""
+    script = os.path.join(SCRIPT_DIR, "main_dm.py")
+    try:
+        subprocess.run([sys.executable, script], check=False)
+    except Exception as e:
+        print(f"\n❌ 启动达梦 DM8 巡检工具失败: {e}")
+        input("\n按回车键返回...")
+
+
 def run_web_ui():
     """启动 Web UI"""
     script = os.path.join(SCRIPT_DIR, "web_ui.py")
@@ -112,9 +123,10 @@ def _run_batch_template_menu():
         print(f"  {GREEN}1{RESET}. MySQL 批量巡检模板 (xlsx)")
         print(f"  {CYAN}2{RESET}. PostgreSQL 批量巡检模板 (xlsx)")
         print(f"  {RED}3{RESET}. Oracle 批量巡检模板 (xlsx)")
-        print(f"  {DIM} 0. 返回主菜单{RESET}")
+        print(f"  {GREEN}4{RESET}. DM8 达梦 批量巡检模板 (xlsx)")
+        print(f"  {DIM}0. 返回主菜单{RESET}")
         print(f"{DIM}{'='*50}{RESET}")
-        sub = input("请选择 [0-3]: ").strip()
+        sub = input("请选择 [0-4]: ").strip()
 
         if sub == '1':
             script = os.path.join(SCRIPT_DIR, "main_mysql.py")
@@ -124,6 +136,9 @@ def _run_batch_template_menu():
             subprocess.run([sys.executable, script, "--template"], check=False)
         elif sub == '3':
             script = os.path.join(SCRIPT_DIR, "main_oracle.py")
+            subprocess.run([sys.executable, script, "--template"], check=False)
+        elif sub == '4':
+            script = os.path.join(SCRIPT_DIR, "main_dm.py")
             subprocess.run([sys.executable, script, "--template"], check=False)
         elif sub == '0' or sub == '':
             break
@@ -136,7 +151,7 @@ def main():
     """统一入口主函数"""
     while True:
         print_banner()
-        choice = input("请选择功能 (1-6): ").strip().lower()
+        choice = input("请选择功能 (1-7): ").strip().lower()
 
         if choice == '1':
             print("\n正在启动 MySQL 数据库巡检工具...")
@@ -148,14 +163,17 @@ def main():
             print("\n正在启动 Oracle 数据库巡检工具...")
             run_oracle_inspector()
         elif choice == '4':
-            _run_batch_template_menu()
+            print("\n正在启动达梦 DM8 数据库巡检工具...")
+            run_dm_inspector()
         elif choice == '5':
-            run_web_ui()
+            _run_batch_template_menu()
         elif choice == '6':
+            run_web_ui()
+        elif choice == '7':
             print("\n感谢使用 DBCheck 数据库巡检工具，再见！👋")
             break
         else:
-            print("\n❌ 无效选择，请输入 1-6。")
+            print("\n❌ 无效选择，请输入 1-7。")
             input("\n按回车键继续...")
 
 

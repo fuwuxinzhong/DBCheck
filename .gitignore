@@ -4,3 +4,5 @@ __pycache__/
 *.docx
 *.pdf
 PUBLISH.md
+test_dm_*.py
+probe*.py

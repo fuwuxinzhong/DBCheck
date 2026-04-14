@@ -236,5 +236,22 @@
         "health_status": "未知"
       }
     ]
+  },
+  "6c32fd92bb8f_10.168.11.179_5238": {
+    "db_type": "dm",
+    "host": "10.168.11.179",
+    "port": "5238",
+    "label": "test-dm",
+    "snapshots": [
+      {
+        "cpu_usage": 13.5,
+        "mem_usage": 67.0,
+        "disk_usage_max": 0,
+        "ts": "2026-04-14 08:29:29",
+        "report_time": "2026-04-14 08:29:29",
+        "risk_count": 0,
+        "health_status": "优秀"
+      }
+    ]
   }
 }

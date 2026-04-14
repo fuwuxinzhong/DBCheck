@@ -491,6 +491,8 @@ select option { background: var(--surface2); }
 }
 .tag-mysql { background: rgba(255,152,0,.12); color: #ff9800; }
 .tag-pg    { background: rgba(56,139,253,.12); color: var(--accent2); }
+.tag-oracle { background: rgba(244,67,54,.12); color: #f44336; }
+.tag-dm    { background: rgba(255,193,7,.12); color: #ffc107; }
 
 /* ─── Responsive ─── */
 @media (max-width: 760px) {
@@ -641,6 +643,14 @@ select option { background: var(--surface2); }
               </div>
               <div class="tc-name">Oracle</div>
               <div class="tc-desc">适用于 Oracle 11g / 12c / 19c / 21c，采集表空间、SGA/PGA、Redo、Data Guard、ASM、RAC 等全面指标。</div>
+            </div>
+            <div class="type-card" id="tc-dm" onclick="selectDbType('dm')">
+              <div class="tc-header">
+                <div class="tc-logo">🟡</div>
+                <div class="tc-check" id="chk-dm"></div>
+              </div>
+              <div class="tc-name">达梦 DM8</div>
+              <div class="tc-desc">适用于达梦 DM8 及以上版本，采集表空间、内存、会话、事务、备份等核心指标。</div>
             </div>
           </div>
           <div class="btn-row">
@@ -996,18 +1006,34 @@ function selectDbType(type) {
   document.getElementById('tc-mysql').classList.toggle('selected', type === 'mysql');
   document.getElementById('tc-pg').classList.toggle('selected', type === 'pg');
   document.getElementById('tc-oracle').classList.toggle('selected', type === 'oracle');
+  document.getElementById('tc-dm').classList.toggle('selected', type === 'dm');
   document.getElementById('chk-mysql').textContent = type === 'mysql' ? '✓' : '';
   document.getElementById('chk-pg').textContent   = type === 'pg'    ? '✓' : '';
   document.getElementById('chk-oracle').textContent = type === 'oracle' ? '✓' : '';
+  document.getElementById('chk-dm').textContent = type === 'dm' ? '✓' : '';
   // 默认端口 & 用户名
-  const portMap = { mysql: 3306, pg: 5432, oracle: 1521 };
-  const userMap = { mysql: 'root', pg: 'postgres', oracle: 'system' };
+  const portMap = { mysql: 3306, pg: 5432, oracle: 1521, dm: 5236 };
+  const userMap = { mysql: 'root', pg: 'postgres', oracle: 'system', dm: 'SYSDBA' };
   document.getElementById('f-port').value = portMap[type] || 3306;
   document.getElementById('f-user').value = userMap[type] || 'root';
   document.getElementById('f-database-wrap').style.display = type === 'pg' ? '' : 'none';
   // Oracle 服务名输入框
   var svcWrap = document.getElementById('f-service-wrap');
   if (svcWrap) svcWrap.style.display = type === 'oracle' ? '' : 'none';
+  // 达梦 DM8：隐藏 SSH 步骤和配置区域（SSH 与达梦服务器兼容性问题暂时禁用）
+  var s3 = document.getElementById('s3');
+  var sl3 = document.getElementById('sl3');
+  var sshCard = document.getElementById('step3');
+  if (s3) s3.style.display = type === 'dm' ? 'none' : '';
+  if (sl3) sl3.style.display = type === 'dm' ? 'none' : '';
+  if (sshCard) sshCard.style.display = type === 'dm' ? 'none' : '';
+  if (type === 'dm') {
+    sshEnabled = false;
+    document.getElementById('ssh-toggle').className = 'toggle';
+    document.getElementById('ssh-toggle-sub').textContent = '当前：未启用（已禁用）';
+    document.getElementById('ssh-fields').className = 'ssh-fields form-grid';
+    document.getElementById('btn-test-ssh').style.display = 'none';
+  }
 }
 
 // ─── Test DB ───
@@ -1084,17 +1110,18 @@ async function testSsh() {
 
 // ─── Confirm Panel ───
 function fillConfirmPanel() {
-  const typeLabels = { mysql: '🐬 MySQL', pg: '🐘 PostgreSQL', oracle: '🔴 Oracle' };
-  const nameDefaults = { mysql: 'MySQL_Server', pg: 'PG_Server', oracle: 'Oracle_Server' };
-  const portDefaults = { mysql: '3306', pg: '5432', oracle: '1521' };
-  const userDefaults = { mysql: 'root', pg: 'postgres', oracle: 'system' };
+  const typeLabels = { mysql: '🐬 MySQL', pg: '🐘 PostgreSQL', oracle: '🔴 Oracle', dm: '🟡 DM8' };
+  const nameDefaults = { mysql: 'MySQL_Server', pg: 'PG_Server', oracle: 'Oracle_Server', dm: 'DM8_Server' };
+  const portDefaults = { mysql: '3306', pg: '5432', oracle: '1521', dm: '5236' };
+  const userDefaults = { mysql: 'root', pg: 'postgres', oracle: 'system', dm: 'SYSDBA' };
   const typeLabel = typeLabels[dbType] || dbType;
   const name = document.getElementById('f-name').value.trim() || (nameDefaults[dbType]||'_Server');
   const host = document.getElementById('f-host').value.trim() || 'localhost';
   const port = document.getElementById('f-port').value || (portDefaults[dbType]||'1521');
   const sshLabel = sshEnabled ? `${document.getElementById('f-ssh-host').value || host}:${document.getElementById('f-ssh-port').value||22}` : '未配置（仅数据库指标）';
 
-  document.getElementById('cf-dbtype').innerHTML = `<span class="tag ${dbType==='mysql'?'tag-mysql':'tag-pg'}">${typeLabel}</span>`;
+  const tagClass = dbType === 'mysql' ? 'tag-mysql' : dbType === 'oracle' ? 'tag-oracle' : dbType === 'dm' ? 'tag-dm' : 'tag-pg';
+  document.getElementById('cf-dbtype').innerHTML = `<span class="tag ${tagClass}">${typeLabel}</span>`;
   document.getElementById('cf-name').textContent = name;
   document.getElementById('cf-conn').textContent = `${host}:${port}`;
   document.getElementById('cf-ssh').textContent = sshLabel;
@@ -1107,9 +1134,9 @@ async function startInspection() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> 启动中...';
 
-  const name = document.getElementById('f-name').value.trim() || (dbType==='mysql'?'MySQL_Server':'PG_Server');
+  const name = document.getElementById('f-name').value.trim() || (dbType==='mysql'?'MySQL_Server':dbType==='oracle'?'Oracle_Server':dbType==='dm'?'DM8_Server':'PG_Server');
   const host = document.getElementById('f-host').value.trim() || 'localhost';
-  const port = parseInt(document.getElementById('f-port').value) || (dbType==='mysql'?3306:5432);
+  const port = parseInt(document.getElementById('f-port').value) || (dbType==='mysql'?3306:dbType==='oracle'?1521:dbType==='dm'?5236:5432);
   const user = document.getElementById('f-user').value.trim() || (userDefaults[dbType]||'root');
   const password = document.getElementById('f-password').value;
   const database = document.getElementById('f-database').value.trim() || 'postgres';
@@ -1303,7 +1330,8 @@ async function loadReports() {
       const isMySQL = f.name.includes('MySQL');
       const isPG    = f.name.includes('PostgreSQL') || f.name.includes('Postgres');
       const isOracle = f.name.includes('Oracle');
-      const tagHtml = isMySQL ? '<span class="tag tag-mysql">MySQL</span>' : isPG ? '<span class="tag tag-pg">PostgreSQL</span>' : isOracle ? '<span class="tag tag-oracle">Oracle</span>' : '';
+      const isDM    = f.name.includes('DM8') || f.name.includes('达梦');
+      const tagHtml = isMySQL ? '<span class="tag tag-mysql">MySQL</span>' : isPG ? '<span class="tag tag-pg">PostgreSQL</span>' : isOracle ? '<span class="tag tag-oracle">Oracle</span>' : isDM ? '<span class="tag tag-dm">DM8</span>' : '';
       const size = f.size > 1024*1024 ? (f.size/1024/1024).toFixed(1)+' MB' : (f.size/1024).toFixed(1)+' KB';
       const dt = new Date(f.mtime*1000).toLocaleString('zh-CN');
       return `
