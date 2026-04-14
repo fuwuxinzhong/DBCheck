@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
+from version import __version__ as VER
+
 """
-达梦 DM8 数据库自动化健康巡检工具 v1.0
+达梦 DM8 数据库自动化健康巡检工具 v{VER}
 支持 DM8 及以上版本
-依赖: dmpython (pip install dmpython), python-docx, docxtpl, openpyxl, psutil, paramiko
+依赖: dmpython (pip install dmpython), python-docx, docxtpl, openpyxl, psutil, paramiko>=2.8,<2.10
 注意: dmpython 需要达梦数据库自带的 dpi 动态库支持
 """
 
@@ -74,7 +76,7 @@ dm_version       = SELECT INSTANCE_NAME, HOST_NAME, SVR_VERSION, DB_VERSION, STA
 dm_database      = SELECT NAME, CREATE_TIME, ARCH_MODE, STATUS$, ROLE$, MAX_SIZE, TOTAL_SIZE FROM V$DATABASE;
 
 # ── 2. 会话与连接 ──────────────────────────────
-dm_sessions       = SELECT SESS_ID, SESS_SEQ, USER_NAME, STATE, TRX_ID, CREATE_TIME, CLNT_IP FROM V$SESSIONS WHERE STATE='ACTIVE' AND USER_NAME NOT IN ('SYSDBA','SYS');
+dm_sessions       = SELECT TOP 50 SESS_ID, SESS_SEQ, USER_NAME, STATE, TRX_ID, CREATE_TIME, CLNT_IP FROM V$SESSIONS WHERE NVL(USER_NAME,'_DUMMY_') NOT IN ('SYSDBA','SYS') ORDER BY STATE, SESS_SEQ DESC;
 dm_session_count  = SELECT COUNT(*) AS TOTAL_ACTIVE FROM V$SESSIONS WHERE STATE='ACTIVE';
 dm_session_detail  = SELECT USER_NAME, STATE, COUNT(*) AS CNT FROM V$SESSIONS GROUP BY USER_NAME, STATE ORDER BY CNT DESC;
 
@@ -228,12 +230,25 @@ class RemoteSystemInfoCollector:
         return disks
 
     def get_system_info(self):
+        import re
         hostname_out, _ = self._run("hostname")
         boot_out, _ = self._run("uptime -s")
         platform_out, _ = self._run("uname -sr")
+        os_release_out, _ = self._run("cat /etc/os-release 2>/dev/null || uname -a")
+        # 从 /etc/os-release 解析 PRETTY_NAME（如 "CentOS Linux 7.9.2009"）
+        platform_text = '未知'
+        if os_release_out:
+            m = re.search(r'PRETTY_NAME="([^"]+)"', os_release_out)
+            if m:
+                platform_text = m.group(1)
+            elif os_release_out.strip():
+                # fallback：使用 uname -a 前3个字段
+                parts = os_release_out.strip().split(maxsplit=3)
+                platform_text = ' '.join(parts[:3]) if len(parts) >= 3 else os_release_out.strip()
         return {
             'hostname': hostname_out.strip() if hostname_out.strip() else '未知',
             'platform': platform_out.strip() if platform_out.strip() else 'Linux',
+            'platform_text': platform_text,
             'boot_time': boot_out.strip() if boot_out.strip() else '未知',
             'cpu': self.get_cpu_info(),
             'memory': self.get_memory_info(),
@@ -293,6 +308,7 @@ class LocalSystemInfoCollector:
         return {
             'hostname': _sock.gethostname(),
             'platform': f"{_pf.system()} {_pf.release()} {_pf.machine()}",
+            'platform_text': f"{_pf.system()} {_pf.release()} ({_pf.machine()})",
             'boot_time': boot_time,
             'cpu': self.get_cpu_info(),
             'memory': self.get_memory_info(),
@@ -980,13 +996,14 @@ class getData(object):
 class saveDoc(object):
     """报告保存类 - 将 DM8 巡检数据渲染到 Word 模板"""
 
-    def __init__(self, context, ofile, ifile, inspector_name="Jack", H=None, P=None):
+    def __init__(self, context, ofile, ifile, inspector_name="Jack", H=None, P=None, _dt=None):
         self.context = context
         self.ofile = ofile
         self.ifile = ifile
         self.inspector_name = inspector_name
         self.H = H
         self.P = P
+        self._dt = _dt
 
     def contextsave(self):
         try:
@@ -1007,7 +1024,7 @@ class saveDoc(object):
 
             list_keys = [
                 'dm_tablespace', 'dm_temp_ts', 'dm_sessions', 'dm_blocked', 'dm_trx',
-                'dm_sga', 'dm_memory_info', 'dm_pga',
+                'dm_sga', 'dm_memory', 'dm_pga',
                 'dm_redo_logs', 'dm_redo_curr',
                 'dm_archive_config', 'dm_archive_lag',
                 'dm_backup',
@@ -1029,7 +1046,7 @@ class saveDoc(object):
                 if key not in self.context:
                     self.context[key] = []
 
-            self.context.update({"report_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+            self.context.update({"report_time": __import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
             self.context.update({"inspector_name": self.inspector_name})
 
             problem_count = len(self.context.get("auto_analyze", []))
@@ -1175,8 +1192,8 @@ class saveDoc(object):
             except Exception as e:
                 return self._fallback_render()
         except Exception as e:
-            print(f"报告生成异常: {e}")
-            return False
+            import traceback; traceback.print_exc(file=sys.stdout)
+            raise RuntimeError(f"报告生成异常: {e}")
 
     def _append_chapters(self, doc):
         """追加第11-13章"""
@@ -1216,17 +1233,17 @@ class saveDoc(object):
                     c.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
             return t
 
-        # 第11章 风险与建议
-        _add_heading("第11章 风险与建议")
+        # 第10章 风险与建议
+        _add_heading("第10章 风险与建议")
         issues = self.context.get("auto_analyze", [])
         if issues:
-            _add_heading("11.1 问题明细", 2)
+            _add_heading("10.1 问题明细", 2)
             _add_table(["序号", "项目", "风险等级", "问题描述", "严重程度", "责任人", "修复建议"],
                        [(str(i+1), x.get('col1',''), x.get('col2',''), x.get('col3',''),
                          x.get('col4',''), x.get('col5',''), x.get('fix_sql','')[:200]) for i,x in enumerate(issues)])
             fix_sqls = [(x.get('col1',''), x.get('fix_sql','')) for x in issues if x.get('fix_sql')]
             if fix_sqls:
-                _add_heading("11.2 修复SQL速查", 2)
+                _add_heading("10.2 修复SQL速查", 2)
                 for fname, sql in fix_sqls:
                     p = doc.add_paragraph(); p.add_run(f"【{fname}】").bold = True
                     doc.add_paragraph(sql, style='List Bullet')
@@ -1234,10 +1251,10 @@ class saveDoc(object):
             p = doc.add_paragraph("未发现明显风险项，数据库整体运行状况良好")
             for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
 
-        # 第12章 AI 诊断
+        # 第11章 AI 诊断
         ai_text = self.context.get('ai_advice', '')
         if ai_text:
-            _add_heading("第12章 AI 诊断建议")
+            _add_heading("第11章 AI 诊断建议")
             for line in ai_text.split('\n'):
                 if line.startswith('# '): _add_heading(line[2:], level=2)
                 elif line.startswith('## '): _add_heading(line[3:], level=3)
@@ -1247,9 +1264,12 @@ class saveDoc(object):
                     doc.add_paragraph(line, style='List Number')
                 elif line.strip():
                     doc.add_paragraph(line)
+            next_chap = 12
+        else:
+            next_chap = 11
 
-        # 第13章 报告说明（段落形式）
-        _add_heading("第13章 报告说明")
+        # 第{11|12}章 报告说明（段落形式）
+        _add_heading(f"第{next_chap}章 报告说明")
         for note in self.context.get('notes_text', '').split('\n'):
             if note.strip():
                 p = doc.add_paragraph(note.strip())
@@ -1296,10 +1316,11 @@ class saveDoc(object):
                                 run.font.size = Pt(9); run.font.name = '微软雅黑'
                         c.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        def _render(key, max_r=50):
+        def _render(key, max_r=50, label=None):
             val = ctx.get(key, '')
             if not val or (isinstance(val, str) and val == "无数据"):
-                p = doc.add_paragraph("暂无数据")
+                desc = label if label else key
+                p = doc.add_paragraph(f"{desc}：暂无数据")
                 for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
                 return
             if isinstance(val, str) and '\t' in val:
@@ -1324,15 +1345,22 @@ class saveDoc(object):
 
             # 封面信息表
             ctx = self.context
+
+            def _v(key, sub_key=None):
+                val = ctx.get(key, '')
+                if isinstance(val, list) and val:
+                    val = val[0].get(sub_key, '') if sub_key else str(val[0])
+                return str(val) if val else 'N/A'
+
             info_items = [
-                ("数据库名称", ctx.get('co_name', '')),
-                ("服务器地址", ctx.get('server_addr', '')),
-                ("达梦版本", ctx.get('dm_version', '')),
-                ("服务器主机名", ctx.get('hostname', 'N/A')),
-                ("实例启动时间", ctx.get('uptime_text', 'N/A')),
-                ("巡检人员", self.inspector_name),
-                ("服务器平台", ctx.get('platform_text', 'N/A')),
-                ("报告生成时间", ctx.get('report_time', '')),
+                ("数据库名称",   _v('co_name', 'DB_NAME')),
+                ("服务器地址",  _v('server_addr')),
+                ("达梦版本",    _v('dm_version', 'BANNER')),
+                ("服务器主机名", _v('hostname')),
+                ("实例启动时间", _v('uptime_text')),
+                ("巡检人员",    self.inspector_name),
+                ("服务器平台",  _v('platform_text')),
+                ("报告生成时间", _v('report_time')),
             ]
             t_info = doc.add_table(rows=len(info_items), cols=2, style='Table Grid')
             for i, (k, v) in enumerate(info_items):
@@ -1343,9 +1371,16 @@ class saveDoc(object):
                         for run in p.runs:
                             run.font.size = Pt(10.5); run.font.name = '微软雅黑'
 
-            # Ch1 基本信息
+# Ch1 基本信息
             _add_heading("第1章 数据库基本信息")
-            _t(["实例名称", "值"], [[ctx.get('co_name', '')], [ctx.get('dm_version', '')]])
+            _co = ctx.get('co_name', '')
+            _dm = ctx.get('dm_version', '')
+            if isinstance(_co, list) and _co: _co = _co[0].get('DB_NAME', '')
+            if isinstance(_dm, list) and _dm: _dm = _dm[0].get('BANNER', '')
+            _t(["项目", "值"], [
+                ["实例名称", str(_co)],
+                ["达梦版本", str(_dm)],
+            ])
 
             # Ch2 巡检执行摘要
             _add_heading("第2章 巡检执行摘要")
@@ -1376,10 +1411,11 @@ class saveDoc(object):
             _render('dm_tablespace', 30)
 
             _add_heading("第4章 会话与事务")
-            _render('dm_sessions'); _render('dm_blocked')
+            _render('dm_sessions'); _render('dm_transactions')
 
             _add_heading("第5章 内存分析")
-            _render('dm_sga'); _render('dm_memory_info')
+            _render('dm_sga', label='SGA 缓冲池汇总')
+            _render('dm_memory', label='各缓冲池详情（SGA）')
 
             _add_heading("第6章 重做日志与归档")
             _render('dm_redo_logs')
@@ -1398,13 +1434,7 @@ class saveDoc(object):
 
             _add_heading("第9章 备份与归档"); _render('dm_backup')
 
-            _add_heading("第10章 报告说明")
-            for note in ctx.get('notes_text', '').split('\n'):
-                if note.strip():
-                    p = doc.add_paragraph(note.strip())
-                    for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
-                    p.paragraph_format.space_after = Pt(6)
-                    p.paragraph_format.line_spacing = 1.5
+            # 第10章由 _append_chapters 统一生成（作为第13章），此处不再重复
 
             self._append_chapters(doc)
             doc.save(self.ofile)
@@ -1420,7 +1450,7 @@ class saveDoc(object):
 # ============================================================
 def main():
     print("=" * 60)
-    print("  达梦 DM8 数据库健康巡检工具 v1.0")
+    print("  DBCheck - DM8 巡检工具 v" + VER)
     print("=" * 60)
 
     # 交互式收集参数
@@ -1493,7 +1523,7 @@ if __name__ == '__main__':
         main()
     else:
         # 有参数 → argparse 批处理模式
-        parser = argparse.ArgumentParser(description='达梦 DM8 数据库健康巡检工具')
+        parser = argparse.ArgumentParser(description='DBCheck - DM8 巡检工具 v' + VER)
         parser.add_argument('--host', default='127.0.0.1', help='数据库主机IP')
         parser.add_argument('--port', type=int, default=5236, help='数据库端口（默认5236）')
         parser.add_argument('--user', default='SYSDBA', help='用户名（默认SYSDBA）')
@@ -1509,7 +1539,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
 
         print("=" * 60)
-        print("  达梦 DM8 数据库健康巡检工具 v1.0")
+        print("  DBCheck - DM8 巡检工具 v" + VER)
         print("=" * 60)
 
         if args.template:

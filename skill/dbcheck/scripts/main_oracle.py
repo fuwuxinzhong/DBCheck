@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
+from version import __version__ as VER
+
 """
-Oracle 数据库自动化健康巡检工具 v1.0
+Oracle 数据库自动化健康巡检工具 v{VER}
 支持 Oracle 11g 及以上版本
 依赖: cx_Oracle 或 oracledb, python-docx, docxtpl, openpyxl, psutil, paramiko
 """
@@ -1927,9 +1929,9 @@ def run_inspection(db_info, service_name=None):
 # ============================================================
 
 def print_banner():
-    print("""
+    print(f"""
 ╔═══════════════════════════════════════════════════════════╗
-║         DBCheck - Oracle 数据库健康巡检工具 v1.0          ║
+║         DBCheck - Oracle 巡检工具 v{VER}          ║
 ║              支持 Oracle 11g / 12c / 19c / 21c             ║
 ║                                                             ║
 ║   巡检项目：表空间 · SGA/PGA · 会话 · 锁 · Redo · 归档     ║

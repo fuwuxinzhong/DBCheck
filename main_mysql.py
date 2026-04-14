@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
+from version import __version__ as VER
 
 # 磁盘采集时忽略的外接 ISO / Media 挂载点前缀
 IGNORE_MOUNTS = {'/mnt/iso', '/media', '/run/media', '/iso', '/cdrom'}
@@ -1769,7 +1770,7 @@ def show_main_menu():
     :return: 用户选择的菜单项字符串（"1"/"2"/"3"/"4"）
     """
     print("\n" + "=" * 60)
-    print("            MySQL 数据库巡检工具 v2.0")
+    print("            DBCheck - MySQL 巡检工具 v" + VER)
     print("=" * 60)
     print("1. 单机巡检")
     print("2. 批量巡检(从Excel导入)")
@@ -2575,7 +2576,7 @@ def print_banner():
   ██║  ██║██╔══██╗██║     ██╔══██║██╔══╝  ██║     ██╔═██╗
   ██████╔╝██████╔╝╚██████╗██║  ██║███████╗╚██████╗██║  ██╗
   ╚═════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝{RESET}
-{GREEN}{BOLD}              🐬  MySQL  数据库巡检工具  v2.0{RESET}
+{GREEN}{BOLD}              🐬  DBCheck - MySQL 巡检工具  v{VER}{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
 {YELLOW}  支持单机巡检 / 批量巡检 / Word报告 / SSH系统采集{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}

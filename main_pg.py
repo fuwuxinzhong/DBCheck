@@ -1,7 +1,9 @@
 ﻿#!/usr/bin/env python3
 # -*- coding:utf-8 -*-
+from version import __version__ as VER
+
 """
-PostgreSQL 数据库自动化健康巡检工具 v1.0
+PostgreSQL 数据库自动化健康巡检工具 v{VER}
 参照 MySQL 巡检工具 (main.py) 结构编写
 依赖: psycopg2, python-docx, docxtpl, openpyxl, psutil, paramiko
 """
@@ -1775,7 +1777,7 @@ def show_main_menu():
     :return: 用户选择的菜单项字符串（"1"/"2"/"3"/"4"）
     """
     print("\n" + "=" * 60)
-    print("            PostgreSQL 数据库巡检工具 v2.0")
+    print("            DBCheck - PostgreSQL 巡检工具 v" + VER)
     print("=" * 60)
     print("1. 单机巡检")
     print("2. 批量巡检(从Excel导入)")
@@ -2623,7 +2625,7 @@ def print_banner():
   ██║  ██║██╔══██╗██║     ██╔══██║██╔══╝  ██║     ██╔═██╗
   ██████╔╝██████╔╝╚██████╗██║  ██║███████╗╚██████╗██║  ██╗
   ╚═════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝{RESET}
-{GREEN}{BOLD}             🐘  PostgreSQL  数据库巡检工具  v2.0{RESET}
+{GREEN}{BOLD}             🐘  DBCheck - PostgreSQL 巡检工具  v{VER}{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
 {YELLOW}  支持单机巡检 / 批量巡检 / Word报告 / SSH系统采集{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}

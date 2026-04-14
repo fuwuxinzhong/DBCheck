@@ -3,9 +3,10 @@
 数据库巡检工具统一入口
 ===========================
 作者: Jack Ge
-版本: v2.1
+版本: {VER}
 功能: 提供 MySQL、PostgreSQL、Oracle 和达梦 DM8 数据库巡检的统一入口
 """
+from version import __version__ as VER
 
 import subprocess
 import sys
@@ -46,7 +47,7 @@ def print_banner():
   ██║  ██║██╔══██╗██║     ██╔══██║██╔══╝  ██║     ██╔═██╗
   ██████╔╝██████╔╝╚██████╗██║  ██║███████╗╚██████╗██║  ██╗
   ╚═════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝{RESET}
-{BOLD}          🗄️  数据库自动化巡检工具  v2.3  统一入口{RESET}
+{BOLD}          🗄️  数据库自动化巡检工具  v{VER}  统一入口{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
 {GREEN}{BOLD}    🐬  1 │ MySQL      {RESET}{DIM}MySQL 命令行巡检{RESET}
 {CYAN}{BOLD}    🐘  2 │ PostgreSQL {RESET}{DIM}PostgreSQL 命令行巡检{RESET}
