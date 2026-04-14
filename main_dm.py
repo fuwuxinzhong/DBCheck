@@ -3,7 +3,7 @@
 from version import __version__ as VER
 
 """
-达梦 DM8 数据库自动化健康巡检工具 v{VER}
+达梦 DM8 数据库自动化健康巡检工具 {VER}
 支持 DM8 及以上版本
 依赖: dmpython (pip install dmpython), python-docx, docxtpl, openpyxl, psutil, paramiko>=2.8,<2.10
 注意: dmpython 需要达梦数据库自带的 dpi 动态库支持
@@ -1450,7 +1450,7 @@ class saveDoc(object):
 # ============================================================
 def main():
     print("=" * 60)
-    print("  DBCheck - DM8 巡检工具 v" + VER)
+    print("  DBCheck - DM8 巡检工具 " + VER)
     print("=" * 60)
 
     # 交互式收集参数
@@ -1523,7 +1523,7 @@ if __name__ == '__main__':
         main()
     else:
         # 有参数 → argparse 批处理模式
-        parser = argparse.ArgumentParser(description='DBCheck - DM8 巡检工具 v' + VER)
+        parser = argparse.ArgumentParser(description='DBCheck - DM8 巡检工具 ' + VER)
         parser.add_argument('--host', default='127.0.0.1', help='数据库主机IP')
         parser.add_argument('--port', type=int, default=5236, help='数据库端口（默认5236）')
         parser.add_argument('--user', default='SYSDBA', help='用户名（默认SYSDBA）')
@@ -1539,7 +1539,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
 
         print("=" * 60)
-        print("  DBCheck - DM8 巡检工具 v" + VER)
+        print("  DBCheck - DM8 巡检工具 " + VER)
         print("=" * 60)
 
         if args.template:

@@ -54,9 +54,9 @@ license: MIT
 | 🐬 MySQL | pymysql | 3306 | ✅ 支持 | 主从复制、binlog、查询缓存 |
 | 🐘 PostgreSQL | psycopg2 | 5432 | ✅ 支持 | 归档模式、缓存命中率、dead tuples |
 | 🔴 Oracle | oracledb / cx_Oracle | 1521 | ✅ 支持 | 表空间、SGA/PGA、RAC、ASM、Data Guard、Redo、备份 |
-| 🟡 DM8 | dmpython | 5236 | ❌ 暂不支持 | 表空间、SGA/PGA、DM8 缓冲池、备份、DM8 特有视图 |
+| 🟡 DM8 | dmpython | 5236 | ✅ 支持 | 表空间、SGA/PGA、DM8 缓冲池、备份、DM8 特有视图 |
 
-> **DM8 SSH 说明**：受限于达梦服务器 OpenSSH 版本（端口 2022），SSH 采集暂时不可用。系统资源信息将使用本地采集器，本地与达梦服务器信息不一致属正常现象。
+> **DM8 SSH 说明**：通过 SSH 采集达梦服务器的主机级系统信息（CPU/内存/磁盘）。连接失败时自动降级为本地采集器。
 
 ## 触发条件
 
@@ -200,7 +200,7 @@ python run_inspection.py \
     --inspector "<巡检人员姓名>"
 ```
 
-> **DM8 注意**：无需填写 `--database` 参数，连接用户即 Schema。DM8 SSH 采集暂不可用。
+> **DM8 注意**：无需填写 `--database` 参数，连接用户即 Schema。SSH 采集连接失败时自动降级为本地采集器。
 
 #### 带 SSH 系统资源采集（MySQL / PostgreSQL / Oracle）
 
@@ -294,7 +294,7 @@ python run_inspection.py \
 ## 限制与注意事项
 
 - 本 Skill 仅用于**合法授权的数据库巡检**，请勿用于未授权访问
-- SSH 采集依赖目标机器的 `top`、`free`、`df`、`lscpu` 命令（使用 `AutoAddPolicy` 接受主机密钥）；**DM8 暂不支持 SSH 采集**
+- SSH 采集依赖目标机器的 `top`、`free`、`df`、`lscpu` 命令（使用 `AutoAddPolicy` 接受主机密钥）
 - 报告生成依赖 `python-docx` 和 `docxtpl` 库，务必确保已安装
 - Oracle 支持 11g R2 / 12c / 19c / 21c 及以上版本，部分高级视图在不同版本间有差异，工具已做兼容处理
 - DM8 巡检依赖 `dmpython` 驱动（`pip install dmpython`）；V$ 视图列名与 Oracle 有较大差异，工具已针对 DM8 实测列名做过适配

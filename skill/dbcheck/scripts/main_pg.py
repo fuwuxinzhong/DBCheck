@@ -3,8 +3,7 @@
 from version import __version__ as VER
 
 """
-PostgreSQL 数据库自动化健康巡检工具 v{VER}
-参照 MySQL 巡检工具 (main.py) 结构编写
+PostgreSQL 数据库自动化健康巡检工具 {VER}
 依赖: psycopg2, python-docx, docxtpl, openpyxl, psutil, paramiko
 """
 import warnings
@@ -1770,14 +1769,14 @@ def show_main_menu():
     """
     显示程序主菜单并等待用户选择。
 
-    打印 PostgreSQL 数据库巡检工具 v2.0 的主菜单，
+    打印 PostgreSQL 数据库巡检工具 的主菜单，
     菜单选项：1 单机巡检、2 批量巡检、3 创建 Excel 模板、4 退出。
     循环接受输入，直到用户输入有效选项（1-4）为止。
 
     :return: 用户选择的菜单项字符串（"1"/"2"/"3"/"4"）
     """
     print("\n" + "=" * 60)
-    print("            DBCheck - PostgreSQL 巡检工具 v" + VER)
+    print("            DBCheck - PostgreSQL 巡检工具 " + VER)
     print("=" * 60)
     print("1. 单机巡检")
     print("2. 批量巡检(从Excel导入)")
@@ -2625,7 +2624,7 @@ def print_banner():
   ██║  ██║██╔══██╗██║     ██╔══██║██╔══╝  ██║     ██╔═██╗
   ██████╔╝██████╔╝╚██████╗██║  ██║███████╗╚██████╗██║  ██╗
   ╚═════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝{RESET}
-{GREEN}{BOLD}             🐘  DBCheck - PostgreSQL 巡检工具  v{VER}{RESET}
+{GREEN}{BOLD}             🐘  DBCheck - PostgreSQL 巡检工具  {VER}{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
 {YELLOW}  支持单机巡检 / 批量巡检 / Word报告 / SSH系统采集{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
