@@ -2393,21 +2393,6 @@ def run_batch_inspection_with_summary(excel_path):
         return [], None
 
 
-def check_license():
-    """许可证检查"""
-    lic_file = "oracle_inspector.lic"
-    if not os.path.exists(lic_file):
-        with open(lic_file, 'w') as f:
-            f.write(json.dumps({"product":"DBCheck Oracle Inspector","version":"1.0",
-                "licensed_to":"Trial","expire":"2099-12-31"}))
-    try:
-        with open(lic_file) as f: lic_data = json.load(f)
-        exp = lic_data.get('expire','')
-        if exp and datetime.strptime(exp,'%Y-%m-%d') < datetime.now():
-            print("\n⚠️ 许可证已过期！请联系管理员。"); sys.exit(1)
-    except Exception: pass
-
-
 def main():
     start_time = time.time()
 
@@ -2416,7 +2401,7 @@ def main():
         create_excel_template()
         return
 
-    print_banner(); check_license()
+    print_banner()
     while True:
         choice = show_main_menu()
         if choice == '1': single_inspection()

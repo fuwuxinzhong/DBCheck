@@ -2630,42 +2630,6 @@ def print_banner():
 """
     print(art)
 
-def check_license():
-    """
-    检查并验证许可证有效性。
-
-    实例化 LicenseValidator 并调用 validate_license()：
-    - 验证通过：打印成功消息后返回
-    - 验证失败：提示用户是否重新创建许可证；
-      重新创建仍失败则调用 sys.exit(1) 退出程序
-    - 验证过程异常：打印警告但不退出，允许程序继续运行
-    """
-    try:
-        validator = LicenseValidator()
-        is_valid, message, remaining_days = validator.validate_license()
-        if not is_valid:
-            print(f"❌ {message}")
-            print(f"📁 许可证文件位置: {validator.license_file}")
-            retry = input("是否尝试重新创建许可证? (y/n) [y]: ").strip().lower()
-            if retry in ['', 'y', 'yes']:
-                validator._create_trial_license()
-                is_valid, message, remaining_days = validator.validate_license()
-                if is_valid:
-                    print(f"✅ {message}")
-                    return
-                else:
-                    print(f"❌ 重新创建许可证失败: {message}")
-                    sys.exit(1)
-            else:
-                print("请联系管理员获取有效许可证")
-                sys.exit(1)
-        else:
-            print(f"✅ {message}")
-            print()
-    except Exception as e:
-        print(f"❌ 许可证检查异常: {e}")
-        print("程序将继续运行，但部分功能可能受限")
-
 def single_inspection():
     """
     执行单机巡检流程。
@@ -2835,14 +2799,13 @@ def main():
     执行流程：
     1. 记录程序启动时间
     2. 打印横幅（print_banner）
-    3. 验证许可证（check_license）
-    4. 进入主菜单循环：
+    3. 进入主菜单循环：
        - 选项 1：执行单机巡检（single_inspection）
        - 选项 2：执行批量巡检（batch_inspection）
        - 选项 3：创建 Excel 模板（create_excel_template）
        - 选项 4：退出程序
-    5. 每次操作完成后询问是否返回主菜单
-    6. 程序退出前打印总运行耗时
+    4. 每次操作完成后询问是否返回主菜单
+    5. 程序退出前打印总运行耗时
     """
     start_time = time.time()
 
@@ -2852,7 +2815,6 @@ def main():
         return
 
     print_banner()
-    check_license()
     while True:
         choice = show_main_menu()
         if choice == '1':

@@ -2801,7 +2801,7 @@ def main():
         return
 
     print_banner()
-    check_license()
+    # check_license()  # 许可证验证已屏蔽
     while True:
         choice = show_main_menu()
         if choice == '1':
