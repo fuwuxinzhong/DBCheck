@@ -55,6 +55,7 @@ template = ./templates/wordtemplates_v2.0.docx
 output = /tmp/MySQLCheckReport.docx
 
 [variables]
+datadir = show variables like 'datadir';
 myversion = SELECT VERSION() as version;
 threads_connected = SHOW STATUS LIKE 'Threads_connected';
 back_log = show variables like 'back_log%';

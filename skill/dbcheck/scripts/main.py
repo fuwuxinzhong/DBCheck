@@ -104,7 +104,7 @@ def run_web_ui():
     """启动 Web UI"""
     script = os.path.join(SCRIPT_DIR, "web_ui.py")
     try:
-        print("\n🌐 正在启动 Web UI，请在浏览器打开 http://localhost:5000")
+        print("\n🌐 正在启动 Web UI，请在浏览器打开 http://localhost:5003")
         print("   按 Ctrl+C 停止服务\n")
         subprocess.run([sys.executable, script], check=False)
     except KeyboardInterrupt:

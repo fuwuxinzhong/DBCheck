@@ -197,7 +197,7 @@ AI 诊断与智能分析的关系：
 
 - **操作系统**：Linux / macOS / Windows
 - **Python**：3.6 及以上
-- **通用依赖**：pymysql、psycopg2-binary、python-docx、docxtpl、paramiko、psutil、openpyxl、pandas、flask
+- **通用依赖**：pymysql、psycopg2-binary、python-docx、docxtpl、paramiko、psutil、openpyxl、pandas、flask、flask_socketio
 - **Oracle 依赖**：`oracledb`（推荐）或 `cx_Oracle`（需要 Oracle Instant Client）
 - **DM8 依赖**：`dmpython`（pip install dmpython）
 - **MySQL 权限**：查询 information_schema、performance_schema、mysql 库的只读权限
@@ -209,7 +209,7 @@ AI 诊断与智能分析的关系：
 ### 安装依赖
 
 ```bash
-pip install pymysql psycopg2-binary paramiko openpyxl docxtpl python-docx pandas psutil flask oracledb dmpython
+pip install pymysql psycopg2-binary paramiko=4.0.0 openpyxl docxtpl python-docx pandas psutil flask oracledb dmpython flask_socketio
 
 > 💡 DM8 驱动安装提示：
 > - `dmpython`：达梦官方提供的纯 Python 驱动（pip install dmpython），推荐使用

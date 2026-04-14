@@ -160,11 +160,12 @@ class RemoteSystemInfoCollector:
         try:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            if self.key_file:
-                private_key = paramiko.RSAKey.from_private_key_file(self.key_file)
-                self.ssh_client.connect(hostname=self.host, port=self.port, username=self.username, pkey=private_key, timeout=10)
-            else:
-                self.ssh_client.connect(hostname=self.host, port=self.port, username=self.username, password=self.password, timeout=10)
+            self.ssh_client.connect(
+                hostname=self.host, port=self.port,
+                username=self.username, password=self.password,
+                timeout=10, look_for_keys=False, allow_agent=False,
+                disabled_algorithms={'pubkeys': ['ssh-rsa']}
+            )
             return True
         except Exception as e:
             print(f"SSH连接失败 {self.host}:{self.port}: {e}")
@@ -817,20 +818,18 @@ class getData(object):
         current_step = total_steps - 4
         self.print_progress_bar(current_step, total_steps, prefix='DM8巡检:', suffix='收集系统信息')
         try:
-            # ── SSH 采集已暂时禁用（达梦服务器 SSH 版本兼容性原因）──
-            # if self.ssh_info and self.ssh_info.get('ssh_host'):
-            #     print(f"\n🔍 通过SSH收集系统信息: {self.ssh_info['ssh_host']}")
-            #     collector = RemoteSystemInfoCollector(
-            #         host=self.ssh_info['ssh_host'], port=self.ssh_info.get('ssh_port', 22),
-            #         username=self.ssh_info.get('ssh_user', 'root'),
-            #         password=self.ssh_info.get('ssh_password'), key_file=self.ssh_info.get('ssh_key_file')
-            #     )
-            #     if not collector.connect():
-            #         print("[WARN]  SSH 连接失败，跳过远程系统信息采集")
-            #         collector = LocalSystemInfoCollector()
-            # else:
-            #     collector = LocalSystemInfoCollector()
-            collector = LocalSystemInfoCollector()
+            if self.ssh_info and self.ssh_info.get('ssh_host'):
+                print(f"[INFO] 通过SSH收集系统信息: {self.ssh_info['ssh_host']}")
+                collector = RemoteSystemInfoCollector(
+                    host=self.ssh_info['ssh_host'], port=self.ssh_info.get('ssh_port', 22),
+                    username=self.ssh_info.get('ssh_user', 'root'),
+                    password=self.ssh_info.get('ssh_password'), key_file=self.ssh_info.get('ssh_key_file')
+                )
+                if not collector.connect():
+                    print("[WARN] SSH 连接失败，跳过远程系统信息采集")
+                    collector = LocalSystemInfoCollector()
+            else:
+                collector = LocalSystemInfoCollector()
             system_info = collector.get_system_info()
             disk_list = system_info.get('disk_list') or system_info.get('disk') or get_host_disk_usage()
             if isinstance(disk_list, dict):
@@ -995,13 +994,14 @@ class getData(object):
 class saveDoc(object):
     """报告保存类 - 将 DM8 巡检数据渲染到 Word 模板"""
 
-    def __init__(self, context, ofile, ifile, inspector_name="Jack", H=None, P=None):
+    def __init__(self, context, ofile, ifile, inspector_name="Jack", H=None, P=None, _dt=None):
         self.context = context
         self.ofile = ofile
         self.ifile = ifile
         self.inspector_name = inspector_name
         self.H = H
         self.P = P
+        self._dt = _dt
 
     def contextsave(self):
         try:
@@ -1044,7 +1044,7 @@ class saveDoc(object):
                 if key not in self.context:
                     self.context[key] = []
 
-            self.context.update({"report_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+            self.context.update({"report_time": __import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
             self.context.update({"inspector_name": self.inspector_name})
 
             problem_count = len(self.context.get("auto_analyze", []))
@@ -1190,8 +1190,8 @@ class saveDoc(object):
             except Exception as e:
                 return self._fallback_render()
         except Exception as e:
-            print(f"报告生成异常: {e}")
-            return False
+            import traceback; traceback.print_exc(file=sys.stdout)
+            raise RuntimeError(f"报告生成异常: {e}")
 
     def _append_chapters(self, doc):
         """追加第11-13章"""
@@ -1343,15 +1343,22 @@ class saveDoc(object):
 
             # 封面信息表
             ctx = self.context
+
+            def _v(key, sub_key=None):
+                val = ctx.get(key, '')
+                if isinstance(val, list) and val:
+                    val = val[0].get(sub_key, '') if sub_key else str(val[0])
+                return str(val) if val else 'N/A'
+
             info_items = [
-                ("数据库名称", ctx.get('co_name', '')),
-                ("服务器地址", ctx.get('server_addr', '')),
-                ("达梦版本", ctx.get('dm_version', '')),
-                ("服务器主机名", ctx.get('hostname', 'N/A')),
-                ("实例启动时间", ctx.get('uptime_text', 'N/A')),
-                ("巡检人员", self.inspector_name),
-                ("服务器平台", ctx.get('platform_text', 'N/A')),
-                ("报告生成时间", ctx.get('report_time', '')),
+                ("数据库名称",   _v('co_name', 'DB_NAME')),
+                ("服务器地址",  _v('server_addr')),
+                ("达梦版本",    _v('dm_version', 'BANNER')),
+                ("服务器主机名", _v('hostname')),
+                ("实例启动时间", _v('uptime_text')),
+                ("巡检人员",    self.inspector_name),
+                ("服务器平台",  _v('platform_text')),
+                ("报告生成时间", _v('report_time')),
             ]
             t_info = doc.add_table(rows=len(info_items), cols=2, style='Table Grid')
             for i, (k, v) in enumerate(info_items):
@@ -1362,9 +1369,16 @@ class saveDoc(object):
                         for run in p.runs:
                             run.font.size = Pt(10.5); run.font.name = '微软雅黑'
 
-            # Ch1 基本信息
+# Ch1 基本信息
             _add_heading("第1章 数据库基本信息")
-            _t(["实例名称", "值"], [[ctx.get('co_name', '')], [ctx.get('dm_version', '')]])
+            _co = ctx.get('co_name', '')
+            _dm = ctx.get('dm_version', '')
+            if isinstance(_co, list) and _co: _co = _co[0].get('DB_NAME', '')
+            if isinstance(_dm, list) and _dm: _dm = _dm[0].get('BANNER', '')
+            _t(["项目", "值"], [
+                ["实例名称", str(_co)],
+                ["达梦版本", str(_dm)],
+            ])
 
             # Ch2 巡检执行摘要
             _add_heading("第2章 巡检执行摘要")

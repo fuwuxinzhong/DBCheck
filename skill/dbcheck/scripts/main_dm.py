@@ -160,11 +160,12 @@ class RemoteSystemInfoCollector:
         try:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            if self.key_file:
-                private_key = paramiko.RSAKey.from_private_key_file(self.key_file)
-                self.ssh_client.connect(hostname=self.host, port=self.port, username=self.username, pkey=private_key, timeout=10)
-            else:
-                self.ssh_client.connect(hostname=self.host, port=self.port, username=self.username, password=self.password, timeout=10)
+            self.ssh_client.connect(
+                hostname=self.host, port=self.port,
+                username=self.username, password=self.password,
+                timeout=10, look_for_keys=False, allow_agent=False,
+                disabled_algorithms={'pubkeys': ['ssh-rsa']}
+            )
             return True
         except Exception as e:
             print(f"SSH连接失败 {self.host}:{self.port}: {e}")
@@ -803,20 +804,18 @@ class getData(object):
         current_step = total_steps - 4
         self.print_progress_bar(current_step, total_steps, prefix='DM8巡检:', suffix='收集系统信息')
         try:
-            # ── SSH 采集已暂时禁用（达梦服务器 SSH 版本兼容性原因）──
-            # if self.ssh_info and self.ssh_info.get('ssh_host'):
-            #     print(f"\n🔍 通过SSH收集系统信息: {self.ssh_info['ssh_host']}")
-            #     collector = RemoteSystemInfoCollector(
-            #         host=self.ssh_info['ssh_host'], port=self.ssh_info.get('ssh_port', 22),
-            #         username=self.ssh_info.get('ssh_user', 'root'),
-            #         password=self.ssh_info.get('ssh_password'), key_file=self.ssh_info.get('ssh_key_file')
-            #     )
-            #     if not collector.connect():
-            #         print("[WARN]  SSH 连接失败，跳过远程系统信息采集")
-            #         collector = LocalSystemInfoCollector()
-            # else:
-            #     collector = LocalSystemInfoCollector()
-            collector = LocalSystemInfoCollector()
+            if self.ssh_info and self.ssh_info.get('ssh_host'):
+                print(f"[INFO] 通过SSH收集系统信息: {self.ssh_info['ssh_host']}")
+                collector = RemoteSystemInfoCollector(
+                    host=self.ssh_info['ssh_host'], port=self.ssh_info.get('ssh_port', 22),
+                    username=self.ssh_info.get('ssh_user', 'root'),
+                    password=self.ssh_info.get('ssh_password'), key_file=self.ssh_info.get('ssh_key_file')
+                )
+                if not collector.connect():
+                    print("[WARN] SSH 连接失败，跳过远程系统信息采集")
+                    collector = LocalSystemInfoCollector()
+            else:
+                collector = LocalSystemInfoCollector()
             system_info = collector.get_system_info()
             disk_list = system_info.get('disk_list') or system_info.get('disk') or get_host_disk_usage()
             if isinstance(disk_list, dict):

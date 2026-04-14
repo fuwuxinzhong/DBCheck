@@ -1020,20 +1020,6 @@ function selectDbType(type) {
   // Oracle 服务名输入框
   var svcWrap = document.getElementById('f-service-wrap');
   if (svcWrap) svcWrap.style.display = type === 'oracle' ? '' : 'none';
-  // 达梦 DM8：隐藏 SSH 步骤和配置区域（SSH 与达梦服务器兼容性问题暂时禁用）
-  var s3 = document.getElementById('s3');
-  var sl3 = document.getElementById('sl3');
-  var sshCard = document.getElementById('step3');
-  if (s3) s3.style.display = type === 'dm' ? 'none' : '';
-  if (sl3) sl3.style.display = type === 'dm' ? 'none' : '';
-  if (sshCard) sshCard.style.display = type === 'dm' ? 'none' : '';
-  if (type === 'dm') {
-    sshEnabled = false;
-    document.getElementById('ssh-toggle').className = 'toggle';
-    document.getElementById('ssh-toggle-sub').textContent = '当前：未启用（已禁用）';
-    document.getElementById('ssh-fields').className = 'ssh-fields form-grid';
-    document.getElementById('btn-test-ssh').style.display = 'none';
-  }
 }
 
 // ─── Test DB ───
@@ -1125,7 +1111,7 @@ function fillConfirmPanel() {
   document.getElementById('cf-name').textContent = name;
   document.getElementById('cf-conn').textContent = `${host}:${port}`;
   document.getElementById('cf-ssh').textContent = sshLabel;
-  document.getElementById('cf-inspector').textContent = inspector;
+  document.getElementById('cf-inspector').textContent = document.getElementById('f-inspector').value.trim() || 'Jack';
 }
 
 // ─── Start Inspection ───
