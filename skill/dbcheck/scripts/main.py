@@ -6,13 +6,21 @@
 版本: {VER}
 功能: 提供 MySQL、PostgreSQL、Oracle 和达梦 DM8 数据库巡检的统一入口
 """
-from version import __version__ as VER
-
-import subprocess
 import sys
 import os
+import warnings
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# 屏蔽打包后 jinja2/markupsafe 引发的 pkg_resources 废弃警告
+warnings.filterwarnings("ignore", category=UserWarning, message="pkg_resources is deprecated")
+
+# 解决 PyInstaller onefile 模式下子模块找不到 version.py 的问题
+# 将 DBCheck 根目录加入 Python 搜索路径（打包后 _MEIPASS 临时目录中也有一份）
+if getattr(sys, 'frozen', False):
+    sys.path.insert(0, sys._MEIPASS)
+else:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from version import __version__ as VER
 
 
 def _enable_ansi():
@@ -25,21 +33,19 @@ def _enable_ansi():
     except Exception:
         pass
 
-# 模块级 ANSI 颜色常量（供 print_banner 和子菜单共用）
+
 _enable_ansi()
-CYAN   = "\033[96m"
-GREEN  = "\033[92m"
-YELLOW = "\033[93m"
-MAGENTA= "\033[95m"
-BOLD   = "\033[1m"
-DIM    = "\033[2m"
-RESET  = "\033[0m"
-RED    = "\033[91m"
+CYAN    = "\033[96m"
+GREEN   = "\033[92m"
+YELLOW  = "\033[93m"
+MAGENTA = "\033[95m"
+BOLD    = "\033[1m"
+DIM     = "\033[2m"
+RESET   = "\033[0m"
+RED     = "\033[91m"
 
 
 def print_banner():
-    """打印统一入口横幅（彩色 ASCII Art）"""
-
     art = f"""
 {CYAN}{BOLD}  ██████╗ ██████╗  ██████╗██╗  ██╗███████╗ ██████╗██╗  ██╗
   ██╔══██╗██╔══██╗██╔════╝██║  ██║██╔════╝██╔════╝██║ ██╔╝
@@ -47,7 +53,7 @@ def print_banner():
   ██║  ██║██╔══██╗██║     ██╔══██║██╔══╝  ██║     ██╔═██╗
   ██████╔╝██████╔╝╚██████╗██║  ██║███████╗╚██████╗██║  ██╗
   ╚═════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝{RESET}
-{BOLD}          🗄️  数据库自动化巡检工具  v{VER}  统一入口{RESET}
+{BOLD}          🗄️  数据库自动化巡检工具  {VER}  统一入口{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
 {GREEN}{BOLD}    🐬  1 │ MySQL      {RESET}{DIM}MySQL 命令行巡检{RESET}
 {CYAN}{BOLD}    🐘  2 │ PostgreSQL {RESET}{DIM}PostgreSQL 命令行巡检{RESET}
@@ -61,62 +67,38 @@ def print_banner():
     print(art)
 
 
-def run_mysql_inspector():
-    """启动 MySQL 巡检工具"""
-    script = os.path.join(SCRIPT_DIR, "main_mysql.py")
+def _run_web_ui():
+    """启动 Web UI（直接 import + 调用 main()）"""
+    import web_ui
+    print("\n🌐 正在启动 Web UI，请在浏览器打开 http://localhost:5003")
+    print("   按 Ctrl+C 停止服务\n")
     try:
-        subprocess.run([sys.executable, script], check=False)
-    except Exception as e:
-        print(f"\n❌ 启动 MySQL 巡检工具失败: {e}")
-        input("\n按回车键返回...")
-
-
-def run_pg_inspector():
-    """启动 PostgreSQL 巡检工具"""
-    script = os.path.join(SCRIPT_DIR, "main_pg.py")
-    try:
-        subprocess.run([sys.executable, script], check=False)
-    except Exception as e:
-        print(f"\n❌ 启动 PostgreSQL 巡检工具失败: {e}")
-        input("\n按回车键返回...")
-
-
-def run_oracle_inspector():
-    """启动 Oracle 巡检工具"""
-    script = os.path.join(SCRIPT_DIR, "main_oracle.py")
-    try:
-        subprocess.run([sys.executable, script], check=False)
-    except Exception as e:
-        print(f"\n❌ 启动 Oracle 巡检工具失败: {e}")
-        input("\n按回车键返回...")
-
-
-def run_dm_inspector():
-    """启动达梦 DM8 巡检工具"""
-    script = os.path.join(SCRIPT_DIR, "main_dm.py")
-    try:
-        subprocess.run([sys.executable, script], check=False)
-    except Exception as e:
-        print(f"\n❌ 启动达梦 DM8 巡检工具失败: {e}")
-        input("\n按回车键返回...")
-
-
-def run_web_ui():
-    """启动 Web UI"""
-    script = os.path.join(SCRIPT_DIR, "web_ui.py")
-    try:
-        print("\n🌐 正在启动 Web UI，请在浏览器打开 http://localhost:5003")
-        print("   按 Ctrl+C 停止服务\n")
-        subprocess.run([sys.executable, script], check=False)
+        web_ui.main()
     except KeyboardInterrupt:
         print("\n⏹️  Web UI 已停止")
-    except Exception as e:
-        print(f"\n❌ 启动 Web UI 失败: {e}")
-        input("\n按回车键返回...")
 
 
-def _run_batch_template_menu():
-    """统一批量巡检模板生成菜单（MySQL / PostgreSQL / Oracle）"""
+def _run_mysql():
+    import main_mysql
+    main_mysql.main()
+
+
+def _run_pg():
+    import main_pg
+    main_pg.main()
+
+
+def _run_oracle():
+    import main_oracle
+    main_oracle.main()
+
+
+def _run_dm():
+    import main_dm
+    main_dm.main()
+
+
+def _run_template_menu():
     while True:
         print(f"\n{BOLD}{'='*50}{RESET}")
         print(f"{YELLOW}{BOLD}   批量巡检模板生成{RESET}")
@@ -130,54 +112,62 @@ def _run_batch_template_menu():
         sub = input("请选择 [0-4]: ").strip()
 
         if sub == '1':
-            script = os.path.join(SCRIPT_DIR, "main_mysql.py")
-            subprocess.run([sys.executable, script, "--template"], check=False)
+            import main_mysql
+            if hasattr(main_mysql, 'create_excel_template'):
+                main_mysql.create_excel_template()
+            else:
+                print("❌ 当前版本不支持 MySQL 批量模板")
         elif sub == '2':
-            script = os.path.join(SCRIPT_DIR, "main_pg.py")
-            subprocess.run([sys.executable, script, "--template"], check=False)
+            import main_pg
+            if hasattr(main_pg, 'create_excel_template'):
+                main_pg.create_excel_template()
+            else:
+                print("❌ 当前版本不支持 PostgreSQL 批量模板")
         elif sub == '3':
-            script = os.path.join(SCRIPT_DIR, "main_oracle.py")
-            subprocess.run([sys.executable, script, "--template"], check=False)
+            import main_oracle
+            if hasattr(main_oracle, 'create_excel_template'):
+                main_oracle.create_excel_template()
+            else:
+                print("❌ 当前版本不支持 Oracle 批量模板")
         elif sub == '4':
-            script = os.path.join(SCRIPT_DIR, "main_dm.py")
-            subprocess.run([sys.executable, script, "--template"], check=False)
-        elif sub == '0' or sub == '':
+            import main_dm
+            if hasattr(main_dm, 'create_excel_template'):
+                main_dm.create_excel_template()
+            else:
+                print("❌ 当前版本不支持 DM8 批量模板")
+        elif sub in ('0', ''):
             break
         else:
             print("\n❌ 无效选择。")
-            input("\n按回车键继续...")
 
 
 def main():
-    """统一入口主函数"""
     while True:
         print_banner()
         choice = input("请选择功能 (1-7): ").strip().lower()
 
         if choice == '1':
-            print("\n正在启动 MySQL 数据库巡检工具...")
-            run_mysql_inspector()
+            print("\n正在启动 MySQL 数据库巡检工具...\n")
+            _run_mysql()
         elif choice == '2':
-            print("\n正在启动 PostgreSQL 数据库巡检工具...")
-            run_pg_inspector()
+            print("\n正在启动 PostgreSQL 数据库巡检工具...\n")
+            _run_pg()
         elif choice == '3':
-            print("\n正在启动 Oracle 数据库巡检工具...")
-            run_oracle_inspector()
+            print("\n正在启动 Oracle 数据库巡检工具...\n")
+            _run_oracle()
         elif choice == '4':
-            print("\n正在启动达梦 DM8 数据库巡检工具...")
-            run_dm_inspector()
+            print("\n正在启动达梦 DM8 数据库巡检工具...\n")
+            _run_dm()
         elif choice == '5':
-            _run_batch_template_menu()
+            _run_template_menu()
         elif choice == '6':
-            run_web_ui()
+            _run_web_ui()
         elif choice == '7':
             print("\n感谢使用 DBCheck 数据库巡检工具，再见！👋")
             break
         else:
             print("\n❌ 无效选择，请输入 1-7。")
-            input("\n按回车键继续...")
 
 
 if __name__ == '__main__':
     main()
-

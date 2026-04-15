@@ -1,25 +1,137 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 
+block_cipher = None
+
+# 项目根目录（SPEC 是 PyInstaller 内置变量，指向本文件所在目录）
+project_root = os.path.dirname(os.path.abspath(SPEC))
 
 a = Analysis(
     ['main.py'],
-    pathex=[],
+    pathex=[project_root],
     binaries=[],
-    datas=[],
-    hiddenimports=['pymysql', 'psycopg2', 'docx', 'docxtpl', 'paramiko', 'psutil', 'openpyxl', 'pandas', 'oracledb', 'dmpython', 'flask_socketio'],
+    datas=[
+        # ── 核心配置文件 ──────────────────────────────────────
+        (os.path.join(project_root, 'version.py'), '.'),
+        # ── 报告模板（所有子模块都需要）───────────────────────
+        (os.path.join(project_root, 'templates'), 'templates'),
+        # ── Web UI ───────────────────────────────────────────
+        (os.path.join(project_root, 'web_templates'), 'web_templates'),
+        (os.path.join(project_root, 'skill', 'dbcheck', 'scripts', 'ai_config.json'), 'ai_config.json'),
+    ],
+    hiddenimports=[
+        # ── 数据库驱动 ───────────────────────────────────────
+        'pymysql',
+        'pymysql.connections',
+        'pymysql.cursors',
+        'pymysql.converters',
+        'psycopg2',
+        'psycopg2.extensions',
+        'psycopg2.extras',
+        'oracledb',
+        'oracledb.basemod',
+        'oracledb.driverless',
+        'cx_Oracle',
+        'dmpython',
+        'dmPython',
+        # ── Word 报告 ────────────────────────────────────────
+        'docx',
+        'docxtpl',
+        'docxtpl.template',
+        'docxtpl.parser',
+        'jinja2',
+        'jinja2.ext',
+        'jinja2.runtime',
+        'jinja2.filters',
+        'kazoo',
+        'lxml',
+        'lxml.etree',
+        'lxml.builder',
+        'lxml._elementpath',
+        'xml.etree.ElementTree',
+        'xml.etree.ElementPath',
+        # ── 系统资源采集 ──────────────────────────────────────
+        'paramiko',
+        'paramiko.transport',
+        'paramiko.client',
+        'paramiko.auth_handler',
+        'paramiko.packet',
+        'paramiko.cipher',
+        'paramiko.util',
+        'paramiko.hostkeys',
+        'paramiko.channel',
+        'psutil',
+        'psutil._common',
+        'psutil._pswindows',
+        # ── 数据处理 ──────────────────────────────────────────
+        'openpyxl',
+        'openpyxl.utils',
+        'openpyxl.workbook',
+        'openpyxl.worksheet',
+        'pandas',
+        'pandas.core',
+        'pandas.core.indexes',
+        # ── Web UI ───────────────────────────────────────────
+        'flask',
+        'flask.app',
+        'flask.blueprints',
+        'flask.templating',
+        'flask_socketio',
+        'flask_socketio.emit_queue',
+        'eventlet',
+        'eventlet.green',
+        'eventlet.queue',
+        'eventlet.semaphore',
+        'eventlet.support',
+        'werkzeug',
+        'werkzeug.serving',
+        'werkzeug.wrappers',
+        'werkzeug.local',
+        'jinja2',
+        'markupsafe',
+        # ── 其他工具 ──────────────────────────────────────────
+        'schedule',
+        'colorama',
+        'PIL',
+        'PIL.Image',
+        # ── 项目模块 ──────────────────────────────────────────
+        'version',
+        'license_manager',
+        'mod_logger',
+        'analyzer',
+        'run_inspection',
+        'main_mysql',
+        'main_pg',
+        'main_oracle',
+        'main_dm',
+        'web_ui',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'tkinter',
+        'matplotlib',
+        'numpy',
+        'scipy',
+        'PyQt5',
+        'PyQt6',
+        'PySide2',
+        'PySide6',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
     noarchive=False,
-    optimize=0,
 )
-pyz = PYZ(a.pure)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
+    a.zipfiles,
     a.datas,
     [],
     name='dbcheck',
