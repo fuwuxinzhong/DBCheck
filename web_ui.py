@@ -8,6 +8,15 @@ from flask import Flask, request, jsonify, render_template, Response, send_file
 from flask_socketio import SocketIO, emit
 import socket
 
+# gevent / eventlet 的 monkey-patch 必须在最前面执行，
+# 确保所有标准库 socket 都替换为非阻塞版本
+try:
+    from gevent import monkey
+    monkey.patch_all()
+    _ASYNC_MODE = 'gevent'
+except ImportError:
+    _ASYNC_MODE = 'eventlet'
+
 # ── 本地模块 ──────────────────────────────────────────────
 try:
     import main_mysql, main_pg, main_oracle, main_dm
@@ -16,7 +25,7 @@ except ImportError:
 
 app = Flask(__name__, template_folder='web_templates', static_folder='web_templates')
 app.config['SECRET_KEY'] = os.urandom(24)
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode=_ASYNC_MODE)
 
 # 全局任务状态
 tasks = {}
