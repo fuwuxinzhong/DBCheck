@@ -1753,6 +1753,160 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
             run.font.color.rgb = RGBColor(0, 102, 204)  # 蓝色，二级标题
             run.font.size = Pt(12)
 
+    def _add_inline_runs(p, text):
+        """向段落中添加文本_run，支持 **加粗** 和 `行内代码` 格式"""
+        import re
+        # 匹配顺序：**加粗**、`行内代码`、其他普通文本
+        # 用占位符保护代码段避免双重匹配
+        segments = []
+        last = 0
+        for m in re.finditer(r'\*\*(.+?)\*\*|`([^`]+)`', text):
+            if m.start() > last:
+                segments.append(('plain', text[last:m.start()]))
+            if m.group(0).startswith('**'):
+                segments.append(('bold', m.group(1)))
+            else:
+                segments.append(('code', m.group(2)))
+            last = m.end()
+        if last < len(text):
+            segments.append(('plain', text[last:]))
+
+        for seg_type, seg_text in segments:
+            run = p.add_run(seg_text)
+            run.font.size = Pt(10.5)
+            if seg_type == 'bold':
+                run.bold = True
+            elif seg_type == 'code':
+                run.font.name = 'Courier New'
+                run.font.size = Pt(9)
+                run.font.color.rgb = RGBColor(0, 102, 204)
+
+    def _render_ai_advice(doc, text):
+        """将 Markdown 格式的 AI 诊断建议渲染为 Word 格式"""
+        lines = text.split('\n')
+        in_code_block = False
+        code_buf = []
+        h2_counter = 0   # 用于 ## 标题序号
+        h3_counter = 0   # 用于 ### 小节序号（在同一 ## 内递增）
+        prev_was_content = False  # 上一行是否渲染了内容（排除空行和纯分隔线）
+
+        for raw in lines:
+            stripped = raw.strip()
+
+            # 代码块开始/结束
+            if stripped.startswith('```'):
+                if in_code_block:
+                    # 渲染代码块
+                    p = doc.add_paragraph()
+                    p.paragraph_format.left_indent = Cm(0.6)
+                    for cl in code_buf:
+                        r = p.add_run(cl + '\n')
+                        r.font.name = 'Courier New'
+                        r.font.size = Pt(9)
+                        r.font.color.rgb = RGBColor(0, 128, 0)
+                    code_buf = []
+                    in_code_block = False
+                    prev_was_content = True
+                else:
+                    in_code_block = True
+                continue
+
+            if in_code_block:
+                code_buf.append(stripped)
+                continue
+
+            # 空行：只打一个间距，不渲染独立空段落
+            if not stripped:
+                prev_was_content = False
+                continue
+
+            # ── 标题处理（>0 个 # + 空格 + 标题文字）─────────────
+            heading_match = re.match(r'^(#{1,3})\s+(.*)', stripped)
+            if heading_match:
+                hashes, title_text = heading_match.groups()
+                h_count = len(hashes)
+
+                if h_count == 1:          # # 一级标题（章）
+                    h = doc.add_heading(title_text, level=2)
+                    for run in h.runs:
+                        run.font.color.rgb = RGBColor(0, 102, 204)
+                        run.font.size = Pt(12)
+                    h2_counter = 0
+                    h3_counter = 0
+
+                elif h_count == 2:        # ## 二级标题（24.1/24.2）
+                    h2_counter += 1
+                    h3_counter = 0
+                    h = doc.add_heading(f"{h2_counter} {title_text}", level=3)
+                    for run in h.runs:
+                        run.font.color.rgb = RGBColor(0, 102, 204)
+                        run.font.size = Pt(11)
+
+                elif h_count == 3:        # ### 三级标题（加粗缩进正文）
+                    h3_counter += 1
+                    p = doc.add_paragraph()
+                    p.paragraph_format.left_indent = Cm(0.3)
+                    p.paragraph_format.space_before = Pt(4)
+                    p.paragraph_format.space_after = Pt(2)
+                    r = p.add_run(f"▌ {title_text}")
+                    r.bold = True
+                    r.italic = True
+                    r.font.size = Pt(10.5)
+                    r.font.color.rgb = RGBColor(0, 102, 204)
+                    prev_was_content = True
+
+                prev_was_content = False   # 标题不计入内容行
+                continue
+
+            # 水平线 → 分隔段落
+            if re.match(r'^[-*_]{3,}$', stripped):
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(4)
+                p.paragraph_format.space_after = Pt(4)
+                prev_was_content = True
+                continue
+
+            # 引用块
+            if stripped.startswith('> '):
+                p = doc.add_paragraph()
+                p.paragraph_format.left_indent = Cm(0.5)
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+                _add_inline_runs(p, stripped[2:])
+                for run in p.runs:
+                    run.font.color.rgb = RGBColor(96, 96, 96)
+                    run.font.italic = True
+                prev_was_content = True
+                continue
+
+            # 无序列表
+            if stripped.startswith('- ') or stripped.startswith('* '):
+                p = doc.add_paragraph(style='List Bullet')
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+                _add_inline_runs(p, stripped[2:])
+                prev_was_content = True
+                continue
+
+            # 有序列表（数字+.）
+            m = re.match(r'^(\d+)\.\s*(.*)', stripped)
+            if m:
+                p = doc.add_paragraph(style='List Number')
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+                _add_inline_runs(p, m.group(2))
+                prev_was_content = True
+                continue
+
+            # 普通段落（含行内格式）
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(0)
+            _add_inline_runs(p, stripped)
+            prev_was_content = True
+
+        doc.add_paragraph()
+
     def _add_kv_table(data, cols=2):
         rows = list(data)
         headers = ['项目', '内容'] if cols == 2 else ['项目', '内容', '备注']
@@ -2095,24 +2249,7 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
     # ── 第24章 AI 诊断 ─────────────────────────────────────────────────────
     _add_section('二十四、AI 诊断建议')
     if ai_advice:
-        for line in ai_advice.split('\n'):
-            if line.strip():
-                if line.startswith('# '):
-                    h = doc.add_heading(line[2:], level=2)
-                    for run in h.runs:
-                        run.font.color.rgb = RGBColor(0, 102, 204)
-                elif line.startswith('- ') or line.startswith('* '):
-                    doc.add_paragraph(line[2:], style='List Bullet')
-                elif re.match(r'^\d+\.', line):
-                    # 避免与 Word 自动编号冲突，直接写纯文本段落
-                    p = doc.add_paragraph(line)
-                    for run in p.runs:
-                        run.font.size = Pt(10.5)
-                else:
-                    p = doc.add_paragraph(line)
-                    for run in p.runs:
-                        run.font.size = Pt(10.5)
-        doc.add_paragraph()
+        _render_ai_advice(doc, ai_advice)
     else:
         p = doc.add_paragraph("AI 诊断未启用或无可用建议。请在 ai_config.json 中配置 Ollama 后重新巡检以获取 AI 诊断。")
         for run in p.runs:
@@ -2410,16 +2547,41 @@ def single_inspection(args):
                     })
             return rows
 
+        # 当前会话总数（session_by_status: [(status, count), ...] → [{TOTAL_SESSIONS: N}])
+        sess_rows = perf.get('session_by_status', [])
+        total_sess = sum(int(r[1]) for r in sess_rows if len(r) >= 2 and str(r[1]).isdigit())
+        ora_sessions_formatted = [{'TOTAL_SESSIONS': total_sess}]
+
+        # SGA 总计（sga_total: [[12345.6]] → [{SGA_TOTAL_MB: 12345.6}]）
+        sga_rows = check_results.get('SGA/PGA内存', {}).get('sga_total', [])
+        sga_val = sga_rows[0][0] if sga_rows and sga_rows[0] else 0.0
+        ora_sga_formatted = [{'SGA_TOTAL_MB': float(sga_val)}]
+
+        # 会话上限（从关键参数 processes/sessions 中取）
+        params = check_results.get('关键参数', {})
+        sess_limit = 0
+        for row in params.get('params', []):
+            if len(row) >= 2 and str(row[0]).lower() == 'sessions':
+                try:
+                    sess_limit = int(float(str(row[1])))
+                except (ValueError, TypeError):
+                    pass
+                break
+        ora_session_limit_formatted = [{'SESSIONS_LIMIT': sess_limit}] if sess_limit else []
+
         context = {
             'ora_version': [{'BANNER': version_str}],
             'ora_tablespace': _ts_rows(ts.get('data_tablespaces', [])),
-            'ora_sessions': perf.get('session_by_status', []),
+            'ora_sessions': ora_sessions_formatted,
+            'ora_sga_total': ora_sga_formatted,
+            'ora_session_limit': ora_session_limit_formatted,
             'system_info': {
                 'hostname': os_data.get('hostname', ''),
-                'cpu': {'usage_percent': os_data.get('cpu_percent', 0)},
-                'memory': {'usage_percent': os_data.get('mem_percent', 0)},
+                'cpu': {'usage_percent': os_data.get('cpu_usage_pct', 0)},
+                'memory': {'usage_percent': os_data.get('mem_usage_pct', os_data.get('mem_percent', 0))},
                 'disk_list': [{'mountpoint': d.get('mount', '/'), 'usage_percent': d.get('percent', 0)}
                               for d in os_data.get('disk_list', [])],
+                'disk_usage': os_data.get('disk_usage', ''),  # SSH 采集原始文本，disk_list 为空时备用
             },
             'health_status': '良好' if not risk_items else ('存在风险' if any(r.get('col2') == '高风险' for r in risk_items) else '一般'),
             'auto_analyze': risk_items if risk_items else [],

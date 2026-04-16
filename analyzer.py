@@ -928,8 +928,23 @@ class HistoryManager:
         m['cpu_usage'] = _safe_float([sys_info.get('cpu', {})], 'usage_percent') if isinstance(sys_info.get('cpu'), dict) else sys_info.get('cpu', {}).get('usage_percent', 0)
         m['mem_usage'] = sys_info.get('memory', {}).get('usage_percent', 0)
         disks = sys_info.get('disk_list', [])
+        disks = sys_info.get('disk_list', [])
         m['disk_usage_max'] = max((d.get('usage_percent', 0) for d in disks
                                    if d.get('mountpoint', '/') not in IGNORE_MOUNTS), default=0)
+        # disk_list 为空时，尝试从原始 disk_usage 文本解析（SSH 采集器格式：df -Ph 输出）
+        if m['disk_usage_max'] == 0:
+            raw = sys_info.get('disk_usage', '')
+            if raw:
+                for line in raw.splitlines():
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        try:
+                            pct = int(parts[4].rstrip('%'))
+                            mp = parts[-1]
+                            if mp not in IGNORE_MOUNTS:
+                                m['disk_usage_max'] = max(m['disk_usage_max'], pct)
+                        except (ValueError, IndexError):
+                            continue
 
         if db_type == 'mysql':
             m['connections'] = _safe_int(context.get('threads_connected', []))
@@ -964,6 +979,9 @@ class HistoryManager:
                 max_ts_used = max((_safe_float(ts.get('USED_PCT_WITH_MAXEXT', ts.get('USED_PCT', 0))) for ts in ts_list), default=0)
                 m['max_tablespace_pct'] = max_ts_used
             m['version'] = context.get('ora_version', [{}])[0].get('BANNER', '') if context.get('ora_version') else ''
+
+            # cpu_usage / mem_usage 在函数开头已从 system_info 提取，此处直接保留（Oracle 分支不清零）
+            # disk_usage_max 同上，已在函数开头通过 disk_list + disk_usage fallback 解析完毕
 
         elif db_type == 'dm':
             # DM8 达梦指标

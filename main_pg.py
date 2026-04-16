@@ -2172,7 +2172,7 @@ class saveDoc(object):
                             if np.runs: np.runs[0].font.size = Pt(11)
                 else:
                     p = doc2.add_paragraph()
-                    p.add_run('💡 AI 诊断未启用。如需开启，请在 Web UI「AI 诊断设置」中配置 AI 后端（支持 DeepSeek / OpenAI / Ollama）。').italic = True
+                    p.add_run('💡 AI 诊断未启用。如需开启，请在 Web UI「AI 诊断设置」中配置后端（仅支持本地 Ollama）').italic = True
 
                 # 第 9 章 报告说明
                 doc2.add_heading('9. 报告说明', level=1)
@@ -2498,7 +2498,7 @@ class saveDoc(object):
                         doc.add_paragraph(line).runs[0].font.size = Pt(11)
             else:
                 p = doc.add_paragraph()
-                p.add_run('💡 AI 诊断未启用。如需开启，请在 Web UI「AI 诊断设置」中配置 AI 后端（支持 DeepSeek / OpenAI / Ollama）。').italic = True
+                p.add_run('💡 AI 诊断未启用。如需开启，请在 Web UI「AI 诊断设置」中配置后端（仅支持本地 Ollama）').italic = True
 
             # ── 9. 报告说明 ──
             doc.add_heading('9. 报告说明', level=1)

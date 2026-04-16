@@ -928,8 +928,23 @@ class HistoryManager:
         m['cpu_usage'] = _safe_float([sys_info.get('cpu', {})], 'usage_percent') if isinstance(sys_info.get('cpu'), dict) else sys_info.get('cpu', {}).get('usage_percent', 0)
         m['mem_usage'] = sys_info.get('memory', {}).get('usage_percent', 0)
         disks = sys_info.get('disk_list', [])
+        disks = sys_info.get('disk_list', [])
         m['disk_usage_max'] = max((d.get('usage_percent', 0) for d in disks
                                    if d.get('mountpoint', '/') not in IGNORE_MOUNTS), default=0)
+        # disk_list 为空时，尝试从原始 disk_usage 文本解析（SSH 采集器格式：df -Ph 输出）
+        if m['disk_usage_max'] == 0:
+            raw = sys_info.get('disk_usage', '')
+            if raw:
+                for line in raw.splitlines():
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        try:
+                            pct = int(parts[4].rstrip('%'))
+                            mp = parts[-1]
+                            if mp not in IGNORE_MOUNTS:
+                                m['disk_usage_max'] = max(m['disk_usage_max'], pct)
+                        except (ValueError, IndexError):
+                            continue
 
         if db_type == 'mysql':
             m['connections'] = _safe_int(context.get('threads_connected', []))
@@ -945,12 +960,16 @@ class HistoryManager:
             cache_hits = context.get('pg_cache_hit', [])
             m['cache_hit_ratio'] = _safe_float(cache_hits, 'cache_hit_ratio') if cache_hits else 0.0
             m['version'] = context.get('pg_version', [{}])[0].get('version', '') if context.get('pg_version') else ''
-        elif db_type == 'oracle':
-            # Oracle 指标
+        elif db_type in ('oracle', 'oracle_full'):
+            # Oracle / Oracle 全面巡检指标
             ora_sess = context.get('ora_sessions', [])
             m['connections'] = _safe_int(ora_sess, 'TOTAL_SESSIONS') if ora_sess else 0
             ora_limit = context.get('ora_session_limit', [])
-            m['max_connections'] = _safe_int(ora_limit, 'SESSIONS_LIMIT') if ora_limit else _safe_int(ora_sess, 'TOTAL_SESSIONS') + 100
+            # oracle_full 没有 ora_session_limit，降级用当前连接+100估算
+            if ora_limit:
+                m['max_connections'] = _safe_int(ora_limit, 'SESSIONS_LIMIT')
+            else:
+                m['max_connections'] = m['connections'] + 100
             sga_total = context.get('ora_sga_total', [])
             m['sga_total_mb'] = _safe_float(sga_total, 'SGA_TOTAL_MB') if sga_total else 0.0
 
@@ -960,6 +979,25 @@ class HistoryManager:
                 max_ts_used = max((_safe_float(ts.get('USED_PCT_WITH_MAXEXT', ts.get('USED_PCT', 0))) for ts in ts_list), default=0)
                 m['max_tablespace_pct'] = max_ts_used
             m['version'] = context.get('ora_version', [{}])[0].get('BANNER', '') if context.get('ora_version') else ''
+
+            # cpu_usage / mem_usage 在函数开头已从 system_info 提取，此处直接保留（Oracle 分支不清零）
+            # disk_usage_max 同上，已在函数开头通过 disk_list + disk_usage fallback 解析完毕
+
+        elif db_type == 'dm':
+            # DM8 达梦指标
+            dm_sess = context.get('dm_sessions', [])
+            m['connections'] = _safe_int(dm_sess, 'TOTAL_SESSIONS') if dm_sess else 0
+            dm_limit = context.get('dm_session_limit', [])
+            m['max_connections'] = _safe_int(dm_limit, 'SESSIONS_LIMIT') if dm_limit else m['connections'] + 100
+            dm_sga = context.get('dm_sga_total', [])
+            m['sga_total_mb'] = _safe_float(dm_sga, 'SGA_TOTAL_MB') if dm_sga else 0.0
+
+            # 表空间最大使用率
+            dm_ts = context.get('dm_tablespace', [])
+            if dm_ts:
+                max_ts_used = max((_safe_float(ts.get('USED_PCT', 0)) for ts in dm_ts), default=0)
+                m['max_tablespace_pct'] = max_ts_used
+            m['version'] = context.get('dm_version', [{}])[0].get('BANNER', '') if context.get('dm_version') else ''
 
         return m
 

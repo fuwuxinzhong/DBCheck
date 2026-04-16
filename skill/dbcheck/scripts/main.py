@@ -55,13 +55,12 @@ def print_banner():
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
 {GREEN}{BOLD}    🐬  1 │ MySQL 巡检         {RESET}{DIM}命令行快速巡检（单库）{RESET}
 {CYAN}{BOLD}    🐘  2 │ PostgreSQL 巡检     {RESET}{DIM}命令行快速巡检（单库）{RESET}
-{RED}{BOLD}    🔴  3 │ Oracle 巡检         {RESET}{DIM}命令行快速巡检（单库）{RESET}
-{RED}    🔴  4 │ Oracle 全面巡检     {RESET}{DIM}增强版（10g/11g/12c+，输出 Word）{RESET}
-{GREEN}{BOLD}    🟡  5 │ DM8 达梦 巡检       {RESET}{DIM}命令行快速巡检（单库）{RESET}
+{RED}    🔴  3 │ Oracle 全面巡检     {RESET}{DIM}增强版（10g/11g/12c+，输出 Word）{RESET}
+{GREEN}{BOLD}    🟡  4 │ DM8 达梦 巡检       {RESET}{DIM}命令行快速巡检（单库）{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
-{YELLOW}    📋  6 │ 批量巡检模板生成     {RESET}{DIM}生成 Excel 批量巡检模板{RESET}
-{MAGENTA}    🌐  7 │ 启动 Web UI          {RESET}{DIM}通过浏览器可视化巡检{RESET}
-{DIM}        8 │ 退出{RESET}
+{YELLOW}    📋  5 │ 批量巡检模板生成     {RESET}{DIM}生成 Excel 批量巡检模板{RESET}
+{MAGENTA}    🌐  6 │ 启动 Web UI          {RESET}{DIM}通过浏览器可视化巡检{RESET}
+{DIM}        7 │ 退出{RESET}
 {DIM}  ──────────────────────────────────────────────────────────{RESET}
 """
     print(art)
@@ -79,9 +78,10 @@ def _run_pg():
     main_pg.main()
 
 
-def _run_oracle():
-    import main_oracle
-    main_oracle.main()
+def _run_oracle_full():
+    """Oracle 全面巡检（增强版，基于 OS 层 + 数据库层）"""
+    import main_oracle_full
+    main_oracle_full.main()
 
 
 def _run_dm():
@@ -104,7 +104,7 @@ def _run_template_menu():
         print(f"{DIM}{'='*50}{RESET}")
         print(f"  {GREEN}1{RESET}. MySQL 批量巡检模板 (xlsx)")
         print(f"  {CYAN}2{RESET}. PostgreSQL 批量巡检模板 (xlsx)")
-        print(f"  {RED}3{RESET}. Oracle 批量巡检模板 (xlsx)")
+        print(f"  {RED}3{RESET}. Oracle 全面巡检模板 (xlsx)")
         print(f"  {GREEN}4{RESET}. DM8 达梦 批量巡检模板 (xlsx)")
         print(f"  {DIM}0. 返回主菜单{RESET}")
         print(f"{DIM}{'='*50}{RESET}")
@@ -123,9 +123,9 @@ def _run_template_menu():
             else:
                 print("❌ 当前版本不支持 PostgreSQL 批量模板")
         elif sub == '3':
-            import main_oracle
-            if hasattr(main_oracle, 'create_excel_template'):
-                main_oracle.create_excel_template()
+            import main_oracle_full
+            if hasattr(main_oracle_full, 'create_excel_template'):
+                main_oracle_full.create_excel_template()
             else:
                 print("❌ 当前版本不支持 Oracle 批量模板")
         elif sub == '4':
@@ -167,23 +167,20 @@ def main():
             print("\n正在启动 PostgreSQL 数据库巡检工具...\n")
             _run_pg()
         elif choice == '3':
-            print("\n正在启动 Oracle 数据库巡检工具...\n")
-            _run_oracle()
-        elif choice == '4':
             print("\n正在启动 Oracle 全面巡检工具（增强版）...\n")
             _run_oracle_full()
-        elif choice == '5':
+        elif choice == '4':
             print("\n正在启动达梦 DM8 数据库巡检工具...\n")
             _run_dm()
-        elif choice == '6':
+        elif choice == '5':
             _run_template_menu()
-        elif choice == '7':
+        elif choice == '6':
             _run_web_ui()
-        elif choice == '8':
+        elif choice == '7':
             print("\n感谢使用 DBCheck 数据库巡检工具，再见！👋")
             break
         else:
-            print("\n❌ 无效选择，请输入 1-8。")
+            print("\n❌ 无效选择，请输入 1-7。")
 
 
 if __name__ == '__main__':

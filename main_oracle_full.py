@@ -2577,10 +2577,11 @@ def single_inspection(args):
             'ora_session_limit': ora_session_limit_formatted,
             'system_info': {
                 'hostname': os_data.get('hostname', ''),
-                'cpu': {'usage_percent': os_data.get('cpu_percent', 0)},
-                'memory': {'usage_percent': os_data.get('mem_percent', 0)},
+                'cpu': {'usage_percent': os_data.get('cpu_usage_pct', 0)},
+                'memory': {'usage_percent': os_data.get('mem_usage_pct', os_data.get('mem_percent', 0))},
                 'disk_list': [{'mountpoint': d.get('mount', '/'), 'usage_percent': d.get('percent', 0)}
                               for d in os_data.get('disk_list', [])],
+                'disk_usage': os_data.get('disk_usage', ''),  # SSH 采集原始文本，disk_list 为空时备用
             },
             'health_status': '良好' if not risk_items else ('存在风险' if any(r.get('col2') == '高风险' for r in risk_items) else '一般'),
             'auto_analyze': risk_items if risk_items else [],

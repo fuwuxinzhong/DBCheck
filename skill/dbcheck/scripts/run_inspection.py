@@ -133,6 +133,91 @@ def run_pg(db_info, inspector_name, ssh_info=None):
     return ofile, file_name
 
 
+def run_oracle_full(db_info, inspector_name, ssh_info=None):
+    """执行 Oracle 全面巡检"""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("main_oracle_full", os.path.join(SCRIPT_DIR, "main_oracle_full.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    reports_dir = os.path.join(SCRIPT_DIR, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    file_name = f"Oracle全面巡检报告_{db_info['label']}_{timestamp}.docx"
+    ofile = os.path.join(reports_dir, file_name)
+
+    data = mod.getData(
+        db_info['host'], db_info['port'],
+        db_info['user'], db_info['password'],
+        db_info.get('service_name', ''),
+        db_info.get('sid', ''),
+        ssh_info or {}
+    )
+    if data is None:
+        raise RuntimeError("无法建立数据库连接，请检查连接参数")
+
+    ret = data.run_full_inspection(inspector_name)
+
+    savedoc = mod.saveDoc(
+        context=ret,
+        ofile=ofile,
+        inspector_name=inspector_name,
+        label=db_info['label']
+    )
+    success = savedoc.contextsave()
+
+    if not success:
+        raise RuntimeError("Word 报告渲染失败")
+
+    return ofile, file_name
+
+
+def run_dm(db_info, inspector_name, ssh_info=None):
+    """执行 DM8 达梦巡检"""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("main_dm", os.path.join(SCRIPT_DIR, "main_dm.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    reports_dir = os.path.join(SCRIPT_DIR, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    file_name = f"DM8巡检报告_{db_info['label']}_{timestamp}.docx"
+    ofile = os.path.join(reports_dir, file_name)
+
+    data = mod.getData(
+        db_info['host'], db_info['port'],
+        db_info['user'], db_info['password'],
+        ssh_info or {}
+    )
+    if data is None:
+        raise RuntimeError("无法建立数据库连接，请检查连接参数")
+
+    ret = data.checkdb('builtin')
+    if not ret:
+        raise RuntimeError("巡检执行失败（checkdb 返回空）")
+
+    ret.update({"co_name": [{'CO_NAME': db_info['label']}]})
+    ret.update({"port": [{'PORT': db_info['port']}]})
+    ret.update({"ip": [{'IP': db_info['host']}]})
+
+    # DM8 的 saveDoc 调用方式（与 MySQL/PG 不同）
+    savedoc = mod.saveDoc(
+        context=ret,
+        ofile=ofile,
+        inspector_name=inspector_name,
+        label=db_info['label']
+    )
+    success = savedoc.contextsave() if hasattr(savedoc, 'contextsave') else savedoc.save()
+
+    if not success:
+        raise RuntimeError("Word 报告渲染失败")
+
+    return ofile, file_name
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="DBCheck 数据库巡检工具（无交互版）",
@@ -148,8 +233,8 @@ def main():
       --ssh-host 192.168.1.20 --ssh-user root --ssh-password mypass
 """
     )
-    parser.add_argument('--type', required=True, choices=['mysql', 'pg'],
-                        help='数据库类型: mysql 或 pg')
+    parser.add_argument('--type', required=True, choices=['mysql', 'pg', 'oracle', 'dm'],
+                        help='数据库类型: mysql / pg / oracle / dm')
     parser.add_argument('--host', required=True, help='数据库主机 IP 或域名')
     parser.add_argument('--port', type=int, default=None,
                         help='数据库端口（默认: MySQL 3306, PG 5432）')
@@ -171,7 +256,8 @@ def main():
     args = parser.parse_args()
 
     if args.port is None:
-        args.port = 3306 if args.type == 'mysql' else 5432
+        defaults = {'mysql': 3306, 'pg': 5432, 'oracle': 1521, 'dm': 5236}
+        args.port = defaults.get(args.type, 3306)
 
     db_info = {
         'label':    args.label,
@@ -193,14 +279,19 @@ def main():
             'ssh_key_file': args.ssh_key or '',
         }
 
-    print(f"\n[{'MySQL' if args.type=='mysql' else 'PostgreSQL'}] 开始巡检: {args.label} ({args.host}:{args.port})")
+    type_labels = {'mysql': 'MySQL', 'pg': 'PostgreSQL', 'oracle': 'Oracle 全面巡检', 'dm': 'DM8'}
+    print(f"\n[{type_labels.get(args.type, args.type)}] 开始巡检: {args.label} ({args.host}:{args.port})")
     print("-" * 50)
 
     try:
         if args.type == 'mysql':
             ofile, fname = run_mysql(db_info, args.inspector, ssh_info)
-        else:
+        elif args.type == 'pg':
             ofile, fname = run_pg(db_info, args.inspector, ssh_info)
+        elif args.type == 'oracle':
+            ofile, fname = run_oracle_full(db_info, args.inspector, ssh_info)
+        elif args.type == 'dm':
+            ofile, fname = run_dm(db_info, args.inspector, ssh_info)
 
         print("-" * 50)
         print(f"✅ 巡检完成！")

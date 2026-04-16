@@ -58,13 +58,13 @@ def get_reports():
             fp = os.path.join(reports_dir, f)
             try:
                 size = os.path.getsize(fp)
-                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(fp)).strftime('%Y-%m-%d %H:%M')
+                mtime = os.path.getmtime(fp)   # Unix 时间戳（秒），前端负责格式化
             except Exception:
                 continue
             db_type = 'DM8' if 'DM8' in f or '达梦' in f else \
                       'Oracle' if 'Oracle' in f else \
                       'PostgreSQL' if 'PG' in f or 'PostgreSQL' in f else 'MySQL'
-            reports.append({'name': f, 'size': format_bytes(size), 'mtime': mtime, 'db_type': db_type})
+            reports.append({'name': f, 'size': size, 'mtime': mtime, 'db_type': db_type})
     return {'files': reports}
 
 # ── 巡检任务 ───────────────────────────────────────────────
