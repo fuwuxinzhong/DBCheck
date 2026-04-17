@@ -1,6 +1,7 @@
 dist/
 build/
 __pycache__/
+copyright_registration/
 *.docx
 *.pdf
 PUBLISH.md
