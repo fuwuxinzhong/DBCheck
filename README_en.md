@@ -10,7 +10,7 @@
 [![DM](https://img.shields.io/badge/DM-yellow.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
 
-> Language: [English](#english) | [中文](#中文)
+> Language: [English](./README_en.md) | [中文](./README.md)
 
 
 ## AI-Assisted - Detect and Resolve Issues
