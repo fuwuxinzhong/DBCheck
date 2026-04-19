@@ -665,6 +665,13 @@ class WordTemplateGenerator:
         self.inspector_name = inspector_name
         self._setup_document()
 
+    def _t(self, key):
+        try:
+            from i18n import t
+            return t(key, _MYSQL_LANG)
+        except Exception:
+            return key
+
     def _setup_document(self):
         """
         设置 Word 文档的页面边距。
@@ -719,28 +726,28 @@ class WordTemplateGenerator:
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         cells = table.rows[0].cells
-        cells[0].text = "数据库名称"
+        cells[0].text = self._t('report.fallback_db_name')
         cells[1].text = "{{ co_name[0]['CO_NAME'] }}"
         cells = table.rows[1].cells
-        cells[0].text = "服务器地址"
+        cells[0].text = self._t('report.fallback_server_addr')
         cells[1].text = "{{ ip[0]['IP'] }}:{{ port[0]['PORT'] }}"
         cells = table.rows[2].cells
-        cells[0].text = "MySQL版本"
+        cells[0].text = self._t('report.fallback_mysql_version')
         cells[1].text = "{{ myversion[0]['version'] }}"
         cells = table.rows[3].cells
-        cells[0].text = "服务器主机名"
+        cells[0].text = self._t('report.fallback_hostname')
         cells[1].text = "{{ system_info.hostname }}"
         cells = table.rows[4].cells
-        cells[0].text = "实例启动时间"
+        cells[0].text = self._t('report.fallback_start_time')
         cells[1].text = "{% if instancetime %}{{ instancetime[0]['started_at'] }}{% else %}N/A{% endif %}"
         cells = table.rows[5].cells
-        cells[0].text = "巡检人员"
+        cells[0].text = self._t('report.fallback_inspector')
         cells[1].text = "{{ inspector_name }}"
         cells = table.rows[6].cells
-        cells[0].text = "服务器平台"
+        cells[0].text = self._t('report.fallback_platform')
         cells[1].text = "{% if platform_info and platform_info|length > 0 %}{% for item in platform_info %}{% if item.variable_name == 'version_compile_os' %}{{ item.variable_value }}{% endif %}{% endfor %}{% else %}N/A{% endif %}"
         cells = table.rows[7].cells
-        cells[0].text = "报告生成时间"
+        cells[0].text = self._t('report.fallback_report_time')
         cells[1].text = "{{ report_time }}"
         for row in table.rows:
             for cell in row.cells:
@@ -755,7 +762,7 @@ class WordTemplateGenerator:
         包含一个 2 行 2 列的状态表（总体健康状态、发现问题数量）
         以及健康总结段落，所有值均使用 Jinja2 模板变量占位。
         """
-        heading = self.doc.add_heading('1. 健康状态概览', level=1)
+        heading = self.doc.add_heading('1. ' + self._t('report.fallback_health_overview'), level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
@@ -765,10 +772,10 @@ class WordTemplateGenerator:
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         cells = table.rows[0].cells
-        cells[0].text = "总体健康状态"
+        cells[0].text = self._t('report.fallback_overall_health')
         cells[1].text = "{{ health_status }}"
         cells = table.rows[1].cells
-        cells[0].text = "发现问题数量"
+        cells[0].text = self._t('report.fallback_issue_count')
         cells[1].text = "{{ problem_count }} 个"
         for row in table.rows:
             for cell in row.cells:
@@ -2005,7 +2012,7 @@ class getData(object):
             if advisor.enabled:
                 label = self.context.get('co_name', [{}])[0].get('CO_NAME', 'MySQL')
                 print("\n🤖 " + _t("mysql_cli_ai_calling").format(backend=advisor.backend, model=advisor.model))
-                ai_advice = advisor.diagnose('mysql', label, self.context, issues)
+                ai_advice = advisor.diagnose('mysql', label, self.context, issues, lang=self._lang)
                 self.context['ai_advice'] = ai_advice
         except Exception as e:
             self.context['ai_advice'] = ''
@@ -2112,7 +2119,8 @@ class saveDoc(object):
                 cutoff_idx = None
                 for i, para in enumerate(doc2.paragraphs):
                     t = para.text.strip()
-                    if t.startswith('7.') and '报告说明' in t:
+                    # 找到旧的"7. 报告说明"段落位置（通过检测第7章标题模式）
+                    if t.startswith('7.') and (self._t('report.notes_chapter') in t or '报告说明' in t or 'Report Notes' in t):
                         cutoff_idx = i
                         break
                 if cutoff_idx is not None:
@@ -2233,7 +2241,7 @@ class saveDoc(object):
                 return self._fallback_render()
 
         except Exception as e:
-            print(f"❌ 生成Word文档失败: {e}")
+            print(f"{self._t('report.fallback_render_fail')}: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -2253,7 +2261,7 @@ class saveDoc(object):
         """
         try:
             doc = Document()
-            title = doc.add_heading('MySQL数据库健康巡检报告', 0)
+            title = doc.add_heading(self._t('report.mysql_title'), 0)
             title.alignment = WD_ALIGN_PARAGRAPH.CENTER
             title_run = title.runs[0]
             title_run.font.size = Pt(20)
@@ -2264,14 +2272,14 @@ class saveDoc(object):
             table.columns[0].width = Cm(4)
             table.columns[1].width = Cm(10)
             data_map = [
-                ("数据库名称", self.context.get('co_name', [{}])[0].get('CO_NAME', 'N/A')),
-                ("服务器地址", f"{self.context.get('ip', [{}])[0].get('IP', 'N/A')}:{self.context.get('port', [{}])[0].get('PORT', 'N/A')}"),
-                ("MySQL版本", self.context.get('myversion', [{}])[0].get('version', 'N/A')),
-                ("服务器主机名", self.context.get('system_info', {}).get('hostname', 'N/A')),
-                ("实例启动时间", self.context.get('instancetime', [{}])[0].get('started_at', 'N/A') if self.context.get('instancetime') else 'N/A'),
-                ("巡检人员", self.inspector_name),
-                ("服务器平台", self._get_platform_info()),
-                ("报告生成时间", self.context.get('report_time', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                (self._t("report.fallback_db_name"), self.context.get('co_name', [{}])[0].get('CO_NAME', 'N/A')),
+                (self._t("report.fallback_server_addr"), f"{self.context.get('ip', [{}])[0].get('IP', 'N/A')}:{self.context.get('port', [{}])[0].get('PORT', 'N/A')}"),
+                (self._t("report.fallback_mysql_version"), self.context.get('myversion', [{}])[0].get('version', 'N/A')),
+                (self._t("report.fallback_hostname"), self.context.get('system_info', {}).get('hostname', 'N/A')),
+                (self._t("report.fallback_start_time"), self.context.get('instancetime', [{}])[0].get('started_at', 'N/A') if self.context.get('instancetime') else 'N/A'),
+                (self._t("report.fallback_inspector"), self.inspector_name),
+                (self._t("report.fallback_platform"), self._get_platform_info()),
+                (self._t("report.fallback_report_time"), self.context.get('report_time', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
             ]
             for i, (label, value) in enumerate(data_map):
                 cells = table.rows[i].cells
@@ -2282,29 +2290,32 @@ class saveDoc(object):
                         for run in paragraph.runs:
                             run.font.size = Pt(11)
             doc.add_page_break()
-            doc.add_heading('1. 健康状态概览', level=1)
+            doc.add_heading('1. ' + self._t('report.fallback_health_overview'), level=1)
             table = doc.add_table(rows=2, cols=2)
             table.style = 'Light Grid Accent 1'
             table.columns[0].width = Cm(4)
             table.columns[1].width = Cm(10)
             cells = table.rows[0].cells
-            cells[0].text = "总体健康状态"
+            cells[0].text = self._t("report.fallback_overall_health")
             cells[1].text = self.context.get('health_status', 'N/A')
             cells = table.rows[1].cells
-            cells[0].text = "发现问题数量"
-            cells[1].text = f"{self.context.get('problem_count', 0)} 个"
+            cells[0].text = self._t("report.fallback_issue_count")
+            cells[1].text = f"{self.context.get('problem_count', 0)}"
             doc.add_paragraph()
-            p = doc.add_paragraph("健康总结: ")
-            p.add_run(self.context.get('health_summary', [{}])[0].get('health_summary', '运行良好')).bold = True
+            p = doc.add_paragraph(self._t("report.fallback_health_summary") + ": ")
+            p.add_run(self.context.get('health_summary', [{}])[0].get('health_summary', self._t('report.running_ok'))).bold = True
 
-            doc.add_heading('2. 系统资源检查', level=1)
+            doc.add_heading('2. ' + self._t('report.fallback_system_check'), level=1)
             cpu = self.context.get('system_info', {}).get('cpu', {})
             mem = self.context.get('system_info', {}).get('memory', {})
-            doc.add_heading('2.1 CPU信息', level=2)
+            doc.add_heading('2.1 ' + self._t('report.fallback_cpu_info'), level=2)
             table = doc.add_table(rows=2, cols=4)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = 'CPU使用率', '物理核心数', '逻辑核心数', '当前频率(GHz)'
+            hdr[0].text = self._t('report.fallback_cpu_usage')
+            hdr[1].text = self._t('report.fallback_physical_cores')
+            hdr[2].text = self._t('report.fallback_logical_cores')
+            hdr[3].text = self._t('report.fallback_freq_ghz')
             row = table.rows[1].cells
             row[0].text = f"{cpu.get('usage_percent', 'N/A')}%"
             row[1].text = str(cpu.get('physical_cores', 'N/A'))
@@ -2312,86 +2323,106 @@ class saveDoc(object):
             freq = cpu.get('current_frequency', 0)
             row[3].text = f"{freq/1000:.2f}" if isinstance(freq, (int, float)) and freq > 100 else str(freq)
             doc.add_paragraph()
-            doc.add_heading('2.2 内存信息', level=2)
+            doc.add_heading('2.2 ' + self._t('report.fallback_memory_info'), level=2)
             table = doc.add_table(rows=2, cols=4)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = '总内存(GB)', '已使用(GB)', '可用内存(GB)', '使用率'
+            hdr[0].text = self._t('report.fallback_total_gb')
+            hdr[1].text = self._t('report.fallback_used_gb')
+            hdr[2].text = self._t('report.fallback_available_gb')
+            hdr[3].text = self._t('report.fallback_usage_pct')
             row = table.rows[1].cells
             row[0].text = f"{mem.get('total_gb', 'N/A')}"
             row[1].text = f"{mem.get('used_gb', 'N/A')}"
             row[2].text = f"{mem.get('available_gb', 'N/A')}"
             row[3].text = f"{mem.get('usage_percent', 'N/A')}%"
             doc.add_paragraph()
-            doc.add_heading('2.3 磁盘信息', level=2)
+            doc.add_heading('2.3 ' + self._t('report.fallback_disk_info'), level=2)
             disk_list = self.context.get('system_info', {}).get('disk_list', [])
             table = doc.add_table(rows=1+len(disk_list), cols=2)
             table.style = 'Light Grid Accent 1'
             table.columns[0].width = Cm(8)
             table.columns[1].width = Cm(4)
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text = '挂载点', '使用率'
+            hdr[0].text = self._t('report.fallback_mountpoint')
+            hdr[1].text = self._t('report.fallback_usage_pct')
             for i, disk in enumerate(disk_list, 1):
                 cells = table.rows[i].cells
                 cells[0].text = disk.get('mountpoint', 'N/A')
                 cells[1].text = f"{disk.get('usage_percent', 0):.2f}%"
 
-            doc.add_heading('3. MySQL配置检查', level=1)
-            doc.add_heading('3.1 连接配置', level=2)
+            doc.add_heading('3. ' + self._t('report.fallback_mysql_config'), level=1)
+            doc.add_heading('3.1 ' + self._t('report.fallback_conn_config'), level=2)
             self._add_config_table(doc, [
-                ('最大连接数', 'max_connections'), ('当前连接数', 'current_connections'),
-                ('交互超时', 'interactive_timeout'), ('文件打开限制', 'open_files_limit')
+                (self._t('report.fallback_max_connections'), 'max_connections'),
+                (self._t('report.fallback_current_connections'), 'current_connections'),
+                (self._t('report.fallback_interactive_timeout'), 'interactive_timeout'),
+                (self._t('report.fallback_open_files_limit'), 'open_files_limit')
             ])
-            doc.add_heading('3.2 内存配置', level=2)
+            doc.add_heading('3.2 ' + self._t('report.fallback_memory_config'), level=2)
             self._add_config_table(doc, [
-                ('InnoDB缓冲池', 'innodb_buffer_pool_size'), ('排序缓冲区', 'sort_buffer_size'),
-                ('连接缓冲区', 'join_buffer_size'), ('线程缓存', 'thread_cache_size')
+                (self._t('report.fallback_innodb_buffer_pool'), 'innodb_buffer_pool_size'),
+                (self._t('report.fallback_sort_buffer'), 'sort_buffer_size'),
+                (self._t('report.fallback_join_buffer'), 'join_buffer_size'),
+                (self._t('report.fallback_thread_cache'), 'thread_cache_size')
             ])
-            doc.add_heading('3.3 日志配置', level=2)
+            doc.add_heading('3.3 ' + self._t('report.fallback_log_config'), level=2)
             self._add_config_table(doc, [
-                ('慢查询日志', 'slow_query_log'), ('Binlog保留天数', 'expire_logs_days'),
-                ('InnoDB日志文件大小', 'innodb_log_file_size'), ('日志刷新设置', 'innodb_flush_log_at_trx_commit')
+                (self._t('report.fallback_slow_query_log'), 'slow_query_log'),
+                (self._t('report.fallback_binlog_days'), 'expire_logs_days'),
+                (self._t('report.fallback_innodb_log_size'), 'innodb_log_file_size'),
+                (self._t('report.fallback_flush_log'), 'innodb_flush_log_at_trx_commit')
             ])
 
-            doc.add_heading('4. 性能分析', level=1)
-            doc.add_heading('4.1 QPS检查', level=2)
-            self._add_config_table(doc, [('总查询数', 'queries')], col1_width=4, col2_width=10)
-            doc.add_heading('4.2 锁信息', level=2)
+            doc.add_heading('4. ' + self._t('report.fallback_perf_analysis'), level=1)
+            doc.add_heading('4.1 ' + self._t('report.fallback_qps_check'), level=2)
+            self._add_config_table(doc, [(self._t('report.fallback_total_queries'), 'queries')], col1_width=4, col2_width=10)
+            doc.add_heading('4.2 ' + self._t('report.fallback_lock_info'), level=2)
             self._add_config_table(doc, [
-                ('立即锁表', 'table_locks_immediate'), ('等待锁表', 'table_locks_waited')
+                (self._t('report.fallback_lock_immediate'), 'table_locks_immediate'),
+                (self._t('report.fallback_lock_waited'), 'table_locks_waited')
             ], col1_width=4, col2_width=10)
-            doc.add_heading('4.3 异常连接', level=2)
+            doc.add_heading('4.3 ' + self._t('report.fallback_abnormal_conn'), level=2)
             aborted = self.context.get('aborted_connections', [])
             table = doc.add_table(rows=3, cols=2)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text = '异常类型', '值'
+            hdr[0].text = self._t('report.fallback_abnormal_type')
+            hdr[1].text = 'Value'
             cells = table.rows[1].cells
-            cells[0].text = '异常客户端连接'
+            cells[0].text = self._t('report.fallback_abnormal_client')
             cells[1].text = aborted[0]['Value'] if len(aborted) > 0 else 'N/A'
             cells = table.rows[2].cells
-            cells[0].text = '异常连接尝试'
+            cells[0].text = self._t('report.fallback_abnormal_attempt')
             cells[1].text = aborted[1]['Value'] if len(aborted) > 1 else 'N/A'
 
-            doc.add_heading('5. 数据库信息', level=1)
-            doc.add_heading('5.1 数据库大小', level=2)
+            doc.add_heading('5. ' + self._t('report.fallback_db_info'), level=1)
+            doc.add_heading('5.1 ' + self._t('report.fallback_db_size'), level=2)
             db_size = self.context.get('db_size', [])
             table = doc.add_table(rows=1+len(db_size), cols=4)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = '数据库名', '表行数', '数据大小(MB)', '索引大小(MB)'
+            hdr[0].text = self._t('report.fallback_dbname')
+            hdr[1].text = self._t('report.fallback_table_rows')
+            hdr[2].text = self._t('report.fallback_data_size_mb')
+            hdr[3].text = self._t('report.fallback_index_size_mb')
             for i, db in enumerate(db_size, 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(db.get('Database_name', ''))
                 cells[1].text = str(db.get('No_of_rows', ''))
                 cells[2].text = str(db.get('Size_data_MB', ''))
                 cells[3].text = str(db.get('Size_index_MB', ''))
-            doc.add_heading('5.2 当前进程列表', level=2)
+            doc.add_heading('5.2 ' + self._t('report.fallback_processlist'), level=2)
             proc = self.context.get('processlist', [])
             table = doc.add_table(rows=1+min(len(proc), 20), cols=6)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text, hdr[5].text = 'ID', '用户', '数据库', '状态', '命令', '时间'
+            hdr[0].text = self._t('report.fallback_process_id')
+            hdr[1].text = self._t('report.fallback_process_user')
+            hdr[2].text = self._t('report.fallback_process_db')
+            hdr[3].text = self._t('report.fallback_process_state')
+            hdr[4].text = self._t('report.fallback_process_command')
+            hdr[5].text = self._t('report.fallback_process_time')
             for i, p in enumerate(proc[:20], 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(p.get('Id', ''))
@@ -2401,13 +2432,17 @@ class saveDoc(object):
                 cells[4].text = str(p.get('Command', ''))
                 cells[5].text = str(p.get('Time', ''))
 
-            doc.add_heading('6. 安全信息', level=1)
-            doc.add_heading('6.1 数据库用户信息', level=2)
+            doc.add_heading('6. ' + self._t('report.fallback_security_info'), level=1)
+            doc.add_heading('6.1 ' + self._t('report.fallback_db_users'), level=2)
             users = self.context.get('mysql_users', [])
             table = doc.add_table(rows=1+len(users), cols=5)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text = '用户名', '主机', '授权权限', '认证插件', '账户锁定'
+            hdr[0].text = self._t('report.fallback_username')
+            hdr[1].text = self._t('report.fallback_host')
+            hdr[2].text = self._t('report.fallback_privileges')
+            hdr[3].text = self._t('report.fallback_auth_plugin')
+            hdr[4].text = self._t('report.fallback_account_locked')
             for i, u in enumerate(users, 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(u.get('col1', ''))
@@ -2416,35 +2451,43 @@ class saveDoc(object):
                 cells[3].text = str(u.get('col4', ''))
                 cells[4].text = str(u.get('col5', ''))
 
-            doc.add_heading('7. 风险与建议', level=1)
+            doc.add_heading('7. ' + self._t('report.fallback_risk_chapter'), level=1)
 
             # ── 7.1 概览统计 ──
             auto_analyze = self.context.get('auto_analyze', [])
-            high_risk  = [i for i in auto_analyze if i.get('col2') == '高风险']
-            mid_risk   = [i for i in auto_analyze if i.get('col2') == '中风险']
-            low_risk   = [i for i in auto_analyze if i.get('col2') in ('低风险', '建议')]
+            high_risk  = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_high')]
+            mid_risk   = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_mid')]
+            low_risk   = [i for i in auto_analyze if i.get('col2') in (self._t('report.risk_low'), self._t('report.risk_suggest'))]
             p = doc.add_paragraph()
-            p.add_run('本次共检测到 ').bold = False
+            p.add_run(self._t('report.fallback_detected_prefix')).bold = False
             if high_risk:
-                run_h = p.add_run(f'{len(high_risk)} 项高风险')
+                run_h = p.add_run(f'{len(high_risk)}' + self._t('report.fallback_high_risk_n'))
                 run_h.bold = True; run_h.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
             if mid_risk:
-                run_m = p.add_run(f' {len(mid_risk)} 项中风险')
+                run_m = p.add_run(f' {len(mid_risk)}' + self._t('report.fallback_mid_risk_n'))
                 run_m.bold = True; run_m.font.color.rgb = RGBColor(0xFF, 0x78, 0x00)
             if low_risk:
-                run_l = p.add_run(f' {len(low_risk)} 项低风险/建议')
+                run_l = p.add_run(f' {len(low_risk)}' + self._t('report.fallback_low_risk_n'))
                 run_l.bold = True; run_l.font.color.rgb = RGBColor(0x37, 0x86, 0x10)
-            p.add_run(f'，共计 {len(auto_analyze)} 项问题。')
+            p.add_run(self._t('report.fallback_detected_suffix2').format(c=len(auto_analyze)))
 
             # ── 7.2 风险明细表格 ──
             if auto_analyze:
-                doc.add_heading('7.1 问题明细', level=2)
+                doc.add_heading('7.1 ' + self._t('report.fallback_issue_detail'), level=2)
                 # 列：序号、风险项、等级、详细描述、优先级、负责人、修复建议
                 col_widths = [Cm(0.8), Cm(3.2), Cm(1.5), Cm(4.0), Cm(1.0), Cm(1.5), Cm(4.0)]
                 tbl = doc.add_table(rows=1 + len(auto_analyze), cols=7)
                 tbl.style = 'Light Grid Accent 1'
                 hdr = tbl.rows[0].cells
-                headers = ['序号', '风险项', '等级', '详细描述', '优先级', '负责人', '修复建议']
+                headers = [
+                    self._t('report.fallback_seq'),
+                    self._t('report.fallback_risk_item'),
+                    self._t('report.fallback_level'),
+                    self._t('report.fallback_desc'),
+                    self._t('report.fallback_priority'),
+                    self._t('report.fallback_owner'),
+                    self._t('report.fallback_fix_suggest')
+                ]
                 for j, (cell, hdr_text) in enumerate(zip(hdr, headers)):
                     cell.text = hdr_text
                     cell.paragraphs[0].runs[0].bold = True
@@ -2459,7 +2502,7 @@ class saveDoc(object):
                     row[4].text = item.get('col4', '')
                     row[5].text = item.get('col5', '')
                     fix_sql = item.get('fix_sql', '').strip()
-                    row[6].text = fix_sql if fix_sql else '—'
+                    row[6].text = fix_sql if fix_sql else self._t('report.fallback_fix_sql_placeholder')
                     for j, cell in enumerate(row):
                         for para in cell.paragraphs:
                             for run in para.runs:
@@ -2467,33 +2510,36 @@ class saveDoc(object):
                         cell.width = col_widths[j]
                     # 等级颜色
                     level = item.get('col2', '')
-                    color_map = {'高风险': RGBColor(0xC0, 0x00, 0x00),
-                                 '中风险': RGBColor(0xFF, 0x78, 0x00),
-                                 '低风险': RGBColor(0x37, 0x86, 0x10),
-                                 '建议':   RGBColor(0x00, 0x70, 0xC0)}
+                    color_map = {
+                        self._t('report.risk_high'): RGBColor(0xC0, 0x00, 0x00),
+                        self._t('report.risk_mid'): RGBColor(0xFF, 0x78, 0x00),
+                        self._t('report.risk_low'): RGBColor(0x37, 0x86, 0x10),
+                        self._t('report.risk_suggest'): RGBColor(0x00, 0x70, 0xC0)
+                    }
                     if level in color_map:
                         row[2].paragraphs[0].runs[0].font.color.rgb = color_map[level]
                         row[2].paragraphs[0].runs[0].bold = True
             else:
-                doc.add_paragraph('✅ 未发现明显风险项，MySQL 数据库运行状态良好。')
+                doc.add_paragraph(self._t('report.fallback_no_risk_found'))
 
             # ── 7.3 修复速查 ──
             fix_items = [i for i in auto_analyze if i.get('fix_sql', '').strip()]
             if fix_items:
-                doc.add_heading('7.2 修复速查', level=2)
+                doc.add_heading('7.2 ' + self._t('report.fallback_fix_chapter'), level=2)
                 for idx, item in enumerate(fix_items, 1):
                     p = doc.add_paragraph()
                     p.add_run(f'{idx}. [{item.get("col1")}] {item.get("col3")[:60]}').bold = True
                     code_p = doc.add_paragraph(item.get('fix_sql', '').strip())
                     code_p.style = 'Quote'
-                    code_p.runs[0].font.size = Pt(9)
+                    if code_p.runs:
+                        code_p.runs[0].font.size = Pt(9)
 
             # ── 8. AI 智能诊断建议 ──
             ai_advice = self.context.get('ai_advice', '').strip()
-            doc.add_heading('8. AI 智能诊断建议', level=1)
+            doc.add_heading('8. ' + self._t('report.fallback_ai_chapter'), level=1)
             if ai_advice:
                 p = doc.add_paragraph()
-                p.add_run('🤖 以下建议由 AI 大模型基于本次巡检数据自动生成，仅供参考，实际操作请结合业务场景谨慎评估。').italic = True
+                p.add_run(self._t('report.fallback_ai_disclaimer')).italic = True
                 doc.add_paragraph()
                 # 分段渲染：保留列表格式
                 for line in ai_advice.split('\n'):
@@ -2510,14 +2556,14 @@ class saveDoc(object):
                 p.add_run(self._t('report.ai_disabled')).italic = True
 
             # ── 9. 报告说明 ──
-            doc.add_heading('9. 报告说明', level=1)
+            doc.add_heading('9. ' + self._t('report.fallback_notes_chapter'), level=1)
             notes = [
-                "1. 本报告基于 MySQL 数据库实时状态生成，反映了生成时刻的数据库健康状况",
-                "2. 报告中空白的项表示未能获取到相关数据，可能是由于权限限制或该功能未启用",
-                "3. 磁盘信息仅显示主要分区的使用率，如需查看完整磁盘信息请使用系统命令 'df -h'",
-                "4. 巡检结果仅供参考，实际运维中请结合具体业务场景进行分析",
-                "5. 建议定期进行数据库巡检，及时发现并解决潜在问题",
-                f"6. AI 诊断功能（若启用）生成的建议仅供参考，不构成专业 DBA 意见"
+                self._t("report.fallback_note_1"),
+                self._t("report.fallback_note_2"),
+                self._t("report.fallback_note_3"),
+                self._t("report.fallback_note_4"),
+                self._t("report.fallback_note_5"),
+                self._t("report.fallback_note_6")
             ]
             for note in notes:
                 doc.add_paragraph(note)

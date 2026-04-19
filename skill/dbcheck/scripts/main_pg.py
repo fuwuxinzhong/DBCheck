@@ -566,6 +566,116 @@ class WordTemplateGenerator:
         self.inspector_name = inspector_name
         self._setup_document()
 
+        # Pre-compute all translated strings for use in template sections
+        # Title page
+        self._l = {
+            'db_name':         self._t('report.fallback_db_name'),
+            'server_addr':     self._t('report.fallback_server_addr'),
+            'pg_version':      self._t('report.fallback_pg_version'),
+            'hostname':        self._t('report.fallback_hostname'),
+            'instance_time':   self._t('report.fallback_instance_time'),
+            'inspector':       self._t('report.fallback_inspector'),
+            'platform':        self._t('report.fallback_platform'),
+            'report_time':     self._t('report.fallback_report_time'),
+            'pg_title':        self._t('report.pg_title'),
+            'overall_health':  self._t('report.fallback_overall_health'),
+            'issue_count':    self._t('report.fallback_issue_count'),
+            # Chapter headings
+            'ch3':             self._t('report.pg_ch3'),
+            'ch31':            self._t('report.pg_ch31'),
+            'ch32':            self._t('report.pg_ch32'),
+            'ch33':            self._t('report.pg_ch33'),
+            'ch4':             self._t('report.pg_ch4'),
+            'ch41':            self._t('report.pg_ch41'),
+            'ch42':            self._t('report.pg_ch42'),
+            'ch43':            self._t('report.pg_ch43'),
+            'ch44':            self._t('report.pg_ch44'),
+            'ch5':             self._t('report.pg_ch5'),
+            'ch51':            self._t('report.pg_ch51'),
+            'ch6':             self._t('report.pg_ch6'),
+            'ch7':             self._t('report.pg_ch7'),
+            'ch8':             self._t('report.pg_ch8'),
+            # Table headers
+            'hdr_config':      self._t('report.pg_hdr_config_item'),
+            'hdr_cur_val':     self._t('report.pg_hdr_current_value'),
+            'hdr_desc':        self._t('report.pg_hdr_description'),
+            'hdr_metric':      self._t('report.pg_hdr_metric'),
+            'hdr_value':       self._t('report.pg_hdr_value'),
+            'hdr_state':       self._t('report.pg_hdr_state'),
+            'hdr_conn_cnt':    self._t('report.pg_hdr_conn_count'),
+            'hdr_db':          self._t('report.pg_hdr_database'),
+            'hdr_size':        self._t('report.pg_hdr_size_gb'),
+            'hdr_total':       self._t('report.pg_hdr_total'),
+            'hdr_user':        self._t('report.pg_hdr_user'),
+            'hdr_member_of':   self._t('report.pg_hdr_member_of'),
+            'hdr_super':       self._t('report.pg_hdr_super'),
+            'hdr_locked':      self._t('report.pg_hdr_locked'),
+            # 3.1 Connection items
+            'max_conn':        self._t('report.pg_max_connections'),
+            'max_conn_desc':   self._t('report.pg_max_connections_desc'),
+            'shared_buf':      self._t('report.pg_shared_buffers'),
+            'shared_buf_desc': self._t('report.pg_shared_buffers_desc'),
+            'eff_cache':       self._t('report.pg_effective_cache'),
+            'eff_cache_desc':  self._t('report.pg_effective_cache_desc'),
+            'work_mem':        self._t('report.pg_work_mem'),
+            'work_mem_desc':   self._t('report.pg_work_mem_desc'),
+            # 3.2 Memory items
+            'maint_mem':       self._t('report.pg_maint_work_mem'),
+            'maint_mem_desc':  self._t('report.pg_maint_work_mem_desc'),
+            'wal_level':       self._t('report.pg_wal_level'),
+            'wal_level_desc':  self._t('report.pg_wal_level_desc'),
+            'max_wal':         self._t('report.pg_max_wal_size'),
+            'max_wal_desc':    self._t('report.pg_max_wal_size_desc'),
+            'ckpt_target':     self._t('report.pg_checkpoint_target'),
+            'ckpt_target_desc':self._t('report.pg_checkpoint_target_desc'),
+            'rnd_page_cost':   self._t('report.pg_random_page_cost'),
+            'rnd_page_cost_desc': self._t('report.pg_random_page_cost_desc'),
+            # 3.3 Autovacuum items
+            'autovacuum':      self._t('report.pg_autovacuum'),
+            'autovacuum_desc': self._t('report.pg_autovacuum_desc'),
+            'vacuum_factor':   self._t('report.pg_autovacuum_vacuum_factor'),
+            'vacuum_factor_desc': self._t('report.pg_autovacuum_vacuum_factor_desc'),
+            'analyze_factor':  self._t('report.pg_autovacuum_analyze_factor'),
+            'analyze_factor_desc': self._t('report.pg_autovacuum_analyze_factor_desc'),
+            'slow_query':      self._t('report.pg_slow_query_threshold'),
+            'slow_query_desc': self._t('report.pg_slow_query_threshold_desc'),
+            # 4.1 Connection status
+            'cur_conn':        self._t('report.pg_current_connections'),
+            'max_conn_hdr':    self._t('report.pg_max_connections_hdr'),
+            'conn_usage':      self._t('report.pg_conn_usage'),
+            # 4.3 Cache hit
+            'dbname':          self._t('report.pg_dbname'),
+            'blks_hit':        self._t('report.pg_blks_hit'),
+            'blks_read':       self._t('report.pg_blks_read'),
+            'hit_ratio':       self._t('report.pg_hit_ratio'),
+            # 5.1 Security
+            'superuser':       self._t('report.pg_superuser'),
+            'locked':          self._t('report.pg已锁定'),
+            # Chapter 2 - System Resources
+            'ch2_title':       self._t('report.pg_ch2_title'),
+            'ch2_cpu':         self._t('report.pg_ch2_cpu'),
+            'ch2_mem':         self._t('report.pg_ch2_mem'),
+            'ch2_disk':        self._t('report.pg_ch2_disk'),
+            'hdr_cpu_usage':   self._t('report.pg_cpu_usage_hdr'),
+            'hdr_physical':    self._t('report.pg_physical_cores_hdr'),
+            'hdr_logical':     self._t('report.pg_logical_cores_hdr'),
+            'hdr_freq':        self._t('report.pg_freq_hdr'),
+            'hdr_total_mem':   self._t('report.pg_total_mem_hdr'),
+            'hdr_used_mem':    self._t('report.pg_used_mem_hdr'),
+            'hdr_avail_mem':   self._t('report.pg_avail_mem_hdr'),
+            'hdr_mem_usage':   self._t('report.pg_mem_usage_hdr'),
+            'hdr_mountpoint':  self._t('report.pg_mountpoint_hdr'),
+            'hdr_disk_usage':  self._t('report.fallback_usage_pct'),
+            'na':              self._t('report.pg_fallback_na'),
+        }
+
+    def _t(self, key):
+        try:
+            from i18n import t
+            return t(key, _PG_LANG)
+        except Exception:
+            return key
+
     def _setup_document(self):
         """
         设置 Word 文档的页面边距。
@@ -608,7 +718,7 @@ class WordTemplateGenerator:
         服务器主机名、实例启动时间、巡检人员、服务器平台、报告生成时间。
         封面末尾插入分页符。
         """
-        title = self.doc.add_heading('PostgreSQL数据库健康巡检报告', 0)
+        title = self.doc.add_heading(self._l['pg_title'], 0)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         title_run = title.runs[0]
         title_run.font.size = Pt(20)
@@ -620,28 +730,28 @@ class WordTemplateGenerator:
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         cells = table.rows[0].cells
-        cells[0].text = "数据库名称"
+        cells[0].text = self._l['db_name']
         cells[1].text = "{{ co_name[0]['CO_NAME'] }}"
         cells = table.rows[1].cells
-        cells[0].text = "服务器地址"
+        cells[0].text = self._l['server_addr']
         cells[1].text = "{{ ip[0]['IP'] }}:{{ port[0]['PORT'] }}"
         cells = table.rows[2].cells
-        cells[0].text = "PostgreSQL版本"
+        cells[0].text = self._l['pg_version']
         cells[1].text = "{{ myversion[0]['version'] }}"
         cells = table.rows[3].cells
-        cells[0].text = "服务器主机名"
+        cells[0].text = self._l['hostname']
         cells[1].text = "{{ system_info.hostname }}"
         cells = table.rows[4].cells
-        cells[0].text = "实例启动时间"
+        cells[0].text = self._l['instance_time']
         cells[1].text = "{% if instancetime %}{{ instancetime[0]['started_at'] }}{% else %}N/A{% endif %}"
         cells = table.rows[5].cells
-        cells[0].text = "巡检人员"
+        cells[0].text = self._l['inspector']
         cells[1].text = "{{ inspector_name }}"
         cells = table.rows[6].cells
-        cells[0].text = "服务器平台"
+        cells[0].text = self._l['platform']
         cells[1].text = "{% if platform_info and platform_info|length > 0 %}{% for item in platform_info %}{% if item.variable_name == 'version_compile_os' %}{{ item.variable_value }}{% endif %}{% endfor %}{% else %}N/A{% endif %}"
         cells = table.rows[7].cells
-        cells[0].text = "报告生成时间"
+        cells[0].text = self._l['report_time']
         cells[1].text = "{{ report_time }}"
         for row in table.rows:
             for cell in row.cells:
@@ -656,7 +766,7 @@ class WordTemplateGenerator:
         包含一个 2 行 2 列的状态表（总体健康状态、发现问题数量）
         以及健康总结段落，所有值均使用 Jinja2 模板变量占位。
         """
-        heading = self.doc.add_heading('1. 健康状态概览', level=1)
+        heading = self.doc.add_heading('1. ' + self._l['overall_health'], level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
@@ -666,17 +776,17 @@ class WordTemplateGenerator:
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         cells = table.rows[0].cells
-        cells[0].text = "总体健康状态"
+        cells[0].text = self._l['overall_health']
         cells[1].text = "{{ health_status }}"
         cells = table.rows[1].cells
-        cells[0].text = "发现问题数量"
+        cells[0].text = self._l['issue_count']
         cells[1].text = "{{ problem_count }} 个"
         for row in table.rows:
             for cell in row.cells:
                 cell.paragraphs[0].runs[0].font.size = Pt(11)
                 cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         self.doc.add_paragraph()
-        p = self.doc.add_paragraph("健康总结: ")
+        p = self.doc.add_paragraph(self._t('report.fallback_health_summary') + ": ")
         p.add_run("{{ health_summary[0]['health_summary'] }}").bold = True
         p.runs[0].font.size = Pt(11)
         p.runs[1].font.size = Pt(11)
@@ -688,29 +798,29 @@ class WordTemplateGenerator:
         - 2.2 内存信息：4 列表格（总量、已用、可用、使用率）
         - 2.3 磁盘信息：2 列表格（挂载点、使用率），使用 Jinja2 循环语法动态生成行
         """
-        heading = self.doc.add_heading('2. 系统资源检查', level=1)
+        heading = self.doc.add_heading(self._l['ch2_title'], level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
-        sub_heading = self.doc.add_heading('2.1 CPU信息', level=2)
+        sub_heading = self.doc.add_heading(self._l['ch2_cpu'], level=2)
         sub_heading_run = sub_heading.runs[0]
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
+        # CPU table: 4 cols, auto-fit to window
         table = self.doc.add_table(rows=2, cols=4)
         table.style = 'Light Grid Accent 1'
-        table.autofit = False
-        for i in range(4):
-            table.columns[i].width = Cm(3.5)
+        table.autofit = True  # 根据窗口自动调整
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = 'CPU使用率'
-        hdr_cells[1].text = '物理核心数'
-        hdr_cells[2].text = '逻辑核心数'
-        hdr_cells[3].text = '当前频率(GHz)'
+        hdr_cells[0].text = self._l['hdr_cpu_usage']
+        hdr_cells[1].text = self._l['hdr_physical']
+        hdr_cells[2].text = self._l['hdr_logical']
+        hdr_cells[3].text = self._l['hdr_freq']
+        na = self._l['na']
         data_cells = table.rows[1].cells
-        data_cells[0].text = "{% if system_info.cpu and system_info.cpu.usage_percent is defined %}{{ '%.2f'|format(system_info.cpu.usage_percent) }}%{% else %}未获取{% endif %}"
-        data_cells[1].text = "{% if system_info.cpu and system_info.cpu.physical_cores is defined %}{{ system_info.cpu.physical_cores }}{% else %}未获取{% endif %}"
-        data_cells[2].text = "{% if system_info.cpu and system_info.cpu.logical_cores is defined %}{{ system_info.cpu.logical_cores }}{% else %}未获取{% endif %}"
-        data_cells[3].text = "{% if system_info.cpu and system_info.cpu.current_frequency != 'N/A' %}{{ '%.2f'|format(system_info.cpu.current_frequency/1000) }}{% else %}未获取{% endif %}"
+        data_cells[0].text = "{% if system_info.cpu and system_info.cpu.usage_percent is defined %}{{ '%.2f'|format(system_info.cpu.usage_percent) }}%{% else %}" + na + "{% endif %}"
+        data_cells[1].text = "{% if system_info.cpu and system_info.cpu.physical_cores is defined %}{{ system_info.cpu.physical_cores }}{% else %}" + na + "{% endif %}"
+        data_cells[2].text = "{% if system_info.cpu and system_info.cpu.logical_cores is defined %}{{ system_info.cpu.logical_cores }}{% else %}" + na + "{% endif %}"
+        data_cells[3].text = "{% if system_info.cpu and system_info.cpu.current_frequency != 'N/A' %}{{ '%.2f'|format(system_info.cpu.current_frequency/1000) }}{% else %}" + na + "{% endif %}"
         for row in table.rows:
             for cell in row.cells:
                 for paragraph in cell.paragraphs:
@@ -718,25 +828,24 @@ class WordTemplateGenerator:
                         run.font.size = Pt(10)
                     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         self.doc.add_paragraph()
-        sub_heading = self.doc.add_heading('2.2 内存信息', level=2)
+        sub_heading = self.doc.add_heading(self._l['ch2_mem'], level=2)
         sub_heading_run = sub_heading.runs[0]
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
+        # Memory table: 4 cols, auto-fit to window
         table = self.doc.add_table(rows=2, cols=4)
         table.style = 'Light Grid Accent 1'
-        table.autofit = False
-        for i in range(4):
-            table.columns[i].width = Cm(3.5)
+        table.autofit = True  # 根据窗口自动调整
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = '总内存(GB)'
-        hdr_cells[1].text = '已使用(GB)'
-        hdr_cells[2].text = '可用内存(GB)'
-        hdr_cells[3].text = '使用率'
+        hdr_cells[0].text = self._l['hdr_total_mem']
+        hdr_cells[1].text = self._l['hdr_used_mem']
+        hdr_cells[2].text = self._l['hdr_avail_mem']
+        hdr_cells[3].text = self._l['hdr_mem_usage']
         data_cells = table.rows[1].cells
-        data_cells[0].text = "{% if system_info.memory and system_info.memory.total_gb is defined %}{{ '%.2f'|format(system_info.memory.total_gb) }}{% else %}未获取{% endif %}"
-        data_cells[1].text = "{% if system_info.memory and system_info.memory.used_gb is defined %}{{ '%.2f'|format(system_info.memory.used_gb) }}{% else %}未获取{% endif %}"
-        data_cells[2].text = "{% if system_info.memory and system_info.memory.available_gb is defined %}{{ '%.2f'|format(system_info.memory.available_gb) }}{% else %}未获取{% endif %}"
-        data_cells[3].text = "{% if system_info.memory and system_info.memory.usage_percent is defined %}{{ '%.2f'|format(system_info.memory.usage_percent) }}%{% else %}未获取{% endif %}"
+        data_cells[0].text = "{% if system_info.memory and system_info.memory.total_gb is defined %}{{ '%.2f'|format(system_info.memory.total_gb) }}{% else %}" + na + "{% endif %}"
+        data_cells[1].text = "{% if system_info.memory and system_info.memory.used_gb is defined %}{{ '%.2f'|format(system_info.memory.used_gb) }}{% else %}" + na + "{% endif %}"
+        data_cells[2].text = "{% if system_info.memory and system_info.memory.available_gb is defined %}{{ '%.2f'|format(system_info.memory.available_gb) }}{% else %}" + na + "{% endif %}"
+        data_cells[3].text = "{% if system_info.memory and system_info.memory.usage_percent is defined %}{{ '%.2f'|format(system_info.memory.usage_percent) }}%{% else %}" + na + "{% endif %}"
         for row in table.rows:
             for cell in row.cells:
                 for paragraph in cell.paragraphs:
@@ -744,19 +853,18 @@ class WordTemplateGenerator:
                         run.font.size = Pt(10)
                     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         self.doc.add_paragraph()
-        sub_heading = self.doc.add_heading('2.3 磁盘信息', level=2)
+        sub_heading = self.doc.add_heading(self._l['ch2_disk'], level=2)
         sub_heading_run = sub_heading.runs[0]
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
+        # Disk table: 2 cols, auto-fit to window
         table = self.doc.add_table(rows=1, cols=2)
         table.style = 'Light Grid Accent 1'
-        table.autofit = False
+        table.autofit = True  # 根据窗口自动调整
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.columns[0].width = Cm(8)
-        table.columns[1].width = Cm(4)
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = '挂载点'
-        hdr_cells[1].text = '使用率'
+        hdr_cells[0].text = self._l['hdr_mountpoint']
+        hdr_cells[1].text = self._l['hdr_disk_usage']
         for cell in hdr_cells:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
@@ -765,7 +873,7 @@ class WordTemplateGenerator:
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_cells = table.add_row().cells
         row_cells[0].text = "{% for disk in system_info.disk_list %}{{ disk.mountpoint }}{% if not loop.last %}\n{% endif %}{% endfor %}"
-        row_cells[1].text = "{% for disk in system_info.disk_list %}{% if disk.usage_percent is defined %}{{ '%.2f'|format(disk.usage_percent) }}%{% else %}未获取{% endif %}{% if not loop.last %}\n{% endif %}{% endfor %}"
+        row_cells[1].text = "{% for disk in system_info.disk_list %}{% if disk.usage_percent is defined %}{{ '%.2f'|format(disk.usage_percent) }}%{% else %}" + na + "{% endif %}{% if not loop.last %}\n{% endif %}{% endfor %}"
         for cell in row_cells:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
@@ -774,20 +882,20 @@ class WordTemplateGenerator:
         self.doc.add_paragraph()
     def _add_pg_config_section(self):
         """
-        生成第 3 章「PostgreSQL 配置检查」，包含三个小节：
+        生成第 3 章「PostgreSQL 配置检查」，包含三个小节。
 
         - 3.1 连接配置：最大连接数、当前连接数、使用率
         - 3.2 内存配置：shared_buffers、work_mem、maintenance_work_mem、effective_cache_size
         - 3.3 核心参数：wal_level、archive_mode、checkpoint_completion_target、autovacuum 等
         每小节均使用「配置项 / 当前值 / 说明」三列表格，值通过 Jinja2 遍历 pg_settings_key 列表填充。
         """
-        heading = self.doc.add_heading('3. PostgreSQL配置检查', level=1)
+        heading = self.doc.add_heading('3. ' + self._l['ch3'], level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
 
         # ---- 3.1 连接配置 ----
-        sub_heading = self.doc.add_heading('3.1 连接配置', level=2)
+        sub_heading = self.doc.add_heading('3.1 ' + self._l['ch31'], level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=5, cols=3)
@@ -797,14 +905,14 @@ class WordTemplateGenerator:
         table.columns[1].width = Cm(4)
         table.columns[2].width = Cm(6)
         hdr = table.rows[0].cells
-        hdr[0].text = '配置项'
-        hdr[1].text = '当前值'
-        hdr[2].text = '说明'
+        hdr[0].text = self._l['hdr_config']
+        hdr[1].text = self._l['hdr_cur_val']
+        hdr[2].text = self._l['hdr_desc']
         conn_items = [
-            ('max_connections', '最大连接数', '允许的最大客户端连接数'),
-            ('shared_buffers', '共享缓冲区', 'PostgreSQL 用于缓存数据的内存'),
-            ('effective_cache_size', '有效缓存大小', '操作系统可用作缓存的内存估算值'),
-            ('work_mem', '工作内存', '排序和哈希操作的内存上限'),
+            ('max_connections',     self._l['max_conn'],        self._l['max_conn_desc']),
+            ('shared_buffers',     self._l['shared_buf'],      self._l['shared_buf_desc']),
+            ('effective_cache_size', self._l['eff_cache'],     self._l['eff_cache_desc']),
+            ('work_mem',           self._l['work_mem'],        self._l['work_mem_desc']),
         ]
         for idx, (name, label, desc) in enumerate(conn_items, 1):
             cells = table.rows[idx].cells
@@ -819,7 +927,7 @@ class WordTemplateGenerator:
         self.doc.add_paragraph()
 
         # ---- 3.2 内存与存储配置 ----
-        sub_heading = self.doc.add_heading('3.2 内存与存储配置', level=2)
+        sub_heading = self.doc.add_heading('3.2 ' + self._l['ch32'], level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=6, cols=3)
@@ -829,15 +937,15 @@ class WordTemplateGenerator:
         table.columns[1].width = Cm(4)
         table.columns[2].width = Cm(6)
         hdr = table.rows[0].cells
-        hdr[0].text = '配置项'
-        hdr[1].text = '当前值'
-        hdr[2].text = '说明'
+        hdr[0].text = self._l['hdr_config']
+        hdr[1].text = self._l['hdr_cur_val']
+        hdr[2].text = self._l['hdr_desc']
         mem_items = [
-            ('maintenance_work_mem', '维护工作内存', 'VACUUM、CREATE INDEX 等维护操作的内存'),
-            ('wal_level', 'WAL 级别', 'Write-Ahead Logging 的记录级别'),
-            ('max_wal_size', '最大 WAL 大小', 'WAL 文件自动checkpoint间的最大增长量'),
-            ('checkpoint_completion_target', '检查点完成目标', '检查点完成的目标时间比例'),
-            ('random_page_cost', '随机页面代价', '随机磁盘访问相对于顺序访问的代价估计'),
+            ('maintenance_work_mem',        self._l['maint_mem'],          self._l['maint_mem_desc']),
+            ('wal_level',                   self._l['wal_level'],          self._l['wal_level_desc']),
+            ('max_wal_size',               self._l['max_wal'],            self._l['max_wal_desc']),
+            ('checkpoint_completion_target', self._l['ckpt_target'],        self._l['ckpt_target_desc']),
+            ('random_page_cost',            self._l['rnd_page_cost'],      self._l['rnd_page_cost_desc']),
         ]
         for idx, (name, label, desc) in enumerate(mem_items, 1):
             cells = table.rows[idx].cells
@@ -852,7 +960,7 @@ class WordTemplateGenerator:
         self.doc.add_paragraph()
 
         # ---- 3.3 自动清理与日志配置 ----
-        sub_heading = self.doc.add_heading('3.3 自动清理与日志配置', level=2)
+        sub_heading = self.doc.add_heading('3.3 ' + self._l['ch33'], level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=5, cols=3)
@@ -862,14 +970,14 @@ class WordTemplateGenerator:
         table.columns[1].width = Cm(4)
         table.columns[2].width = Cm(6)
         hdr = table.rows[0].cells
-        hdr[0].text = '配置项'
-        hdr[1].text = '当前值'
-        hdr[2].text = '说明'
+        hdr[0].text = self._l['hdr_config']
+        hdr[1].text = self._l['hdr_cur_val']
+        hdr[2].text = self._l['hdr_desc']
         other_items = [
-            ('autovacuum', '自动清理', '是否启用自动 Vacuum'),
-            ('autovacuum_vacuum_scale_factor', 'Vacuum 比例因子', '触发 vacuum 的表行数比例'),
-            ('autovacuum_analyze_scale_factor', 'Analyze 比例因子', '触发 analyze 的表行数比例'),
-            ('log_min_duration_statement', '慢查询阈值(ms)', '记录超过此时间的查询（毫秒）'),
+            ('autovacuum',                       self._l['autovacuum'],          self._l['autovacuum_desc']),
+            ('autovacuum_vacuum_scale_factor',   self._l['vacuum_factor'],        self._l['vacuum_factor_desc']),
+            ('autovacuum_analyze_scale_factor',  self._l['analyze_factor'],       self._l['analyze_factor_desc']),
+            ('log_min_duration_statement',        self._l['slow_query'],           self._l['slow_query_desc']),
         ]
         for idx, (name, label, desc) in enumerate(other_items, 1):
             cells = table.rows[idx].cells
@@ -891,13 +999,13 @@ class WordTemplateGenerator:
         - 4.4 后台写入器：检查点统计和缓冲区分配信息
         所有值均通过 Jinja2 遍历对应列表填充。
         """
-        heading = self.doc.add_heading('4. 性能分析', level=1)
+        heading = self.doc.add_heading('4. ' + self._l['ch4'], level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
 
         # ---- 4.1 连接状态 ----
-        sub_heading = self.doc.add_heading('4.1 连接状态', level=2)
+        sub_heading = self.doc.add_heading('4.1 ' + self._l['ch41'], level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=4, cols=2)
@@ -906,12 +1014,12 @@ class WordTemplateGenerator:
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         hdr = table.rows[0].cells
-        hdr[0].text = '指标'
-        hdr[1].text = '值'
+        hdr[0].text = self._l['hdr_metric']
+        hdr[1].text = self._l['hdr_value']
         conn_data = [
-            ('当前连接数', "{% if pg_connections and pg_connections[0] %}{{ pg_connections[0]['total_connections'] }}{% endif %}"),
-            ('最大连接数', "{% if pg_connections and pg_connections[0] %}{{ pg_connections[0]['max_connections'] }}{% endif %}"),
-            ('连接使用率', "{% if pg_connections and pg_connections[0] %}{{ pg_connections[0]['usage_percent'] }}%{% endif %}"),
+            (self._l['cur_conn'], "{% if pg_connections and pg_connections[0] %}{{ pg_connections[0]['total_connections'] }}{% endif %}"),
+            (self._l['max_conn_hdr'], "{% if pg_connections and pg_connections[0] %}{{ pg_connections[0]['max_connections'] }}{% endif %}"),
+            (self._l['conn_usage'], "{% if pg_connections and pg_connections[0] %}{{ pg_connections[0]['usage_percent'] }}%{% endif %}"),
         ]
         for idx, (label, val_tpl) in enumerate(conn_data, 1):
             cells = table.rows[idx].cells
@@ -925,7 +1033,7 @@ class WordTemplateGenerator:
         self.doc.add_paragraph()
 
         # ---- 4.2 连接详情 ----
-        sub_heading = self.doc.add_heading('4.2 连接详情（按状态分组）', level=2)
+        sub_heading = self.doc.add_heading('4.2 ' + self._l['ch42'], level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=2)
@@ -934,8 +1042,8 @@ class WordTemplateGenerator:
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(4)
         hdr = table.rows[0].cells
-        hdr[0].text = '状态'
-        hdr[1].text = '连接数'
+        hdr[0].text = self._l['hdr_state']
+        hdr[1].text = self._l['hdr_conn_cnt']
         for cell in hdr:
             for p in cell.paragraphs:
                 for r in p.runs:
@@ -956,7 +1064,7 @@ class WordTemplateGenerator:
         self.doc.add_paragraph()
 
         # ---- 4.3 缓存命中率 ----
-        sub_heading = self.doc.add_heading('4.3 缓存命中率', level=2)
+        sub_heading = self.doc.add_heading('4.3 ' + self._l['ch43'], level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
@@ -968,11 +1076,11 @@ class WordTemplateGenerator:
         table.columns[3].width = Cm(2)
         table.columns[4].width = Cm(5)
         hdr = table.rows[0].cells
-        hdr[0].text = '数据库'
-        hdr[1].text = '命中块数'
-        hdr[2].text = '读取块数'
-        hdr[3].text = '命中率(%)'
-        hdr[4].text = '说明'
+        hdr[0].text = self._l['hdr_db']
+        hdr[1].text = self._l['blks_hit']
+        hdr[2].text = self._l['blks_read']
+        hdr[3].text = self._l['hit_ratio']
+        hdr[4].text = self._l['hdr_desc']
         for cell in hdr:
             for p in cell.paragraphs:
                 for r in p.runs:
@@ -985,7 +1093,7 @@ class WordTemplateGenerator:
             hit_tpl = "{{{{ pg_cache_hit[{}].blks_hit if pg_cache_hit and pg_cache_hit[{}] else '' }}}}".format(i, i)
             read_tpl = "{{{{ pg_cache_hit[{}].blks_read if pg_cache_hit and pg_cache_hit[{}] else '' }}}}".format(i, i)
             ratio_tpl = "{{{{ pg_cache_hit[{}].cache_hit_ratio if pg_cache_hit and pg_cache_hit[{}] else '' }}}}".format(i, i)
-            desc_tpl = "{% if pg_cache_hit and pg_cache_hit[" + str(i) + "] %}{% if pg_cache_hit[" + str(i) + "]['cache_hit_ratio']|float >= 90 %}良好{% elif pg_cache_hit[" + str(i) + "]['cache_hit_ratio']|float >= 70 %}一般{% else %}较差{% endif %}{% endif %}"
+            desc_tpl = "{% if pg_cache_hit and pg_cache_hit[" + str(i) + "] %}{% if pg_cache_hit[" + str(i) + "]['cache_hit_ratio']|float >= 90 %}" + self._t('report.fallback_pg_cache_hit_good') + "{% elif pg_cache_hit[" + str(i) + "]['cache_hit_ratio']|float >= 70 %}" + self._t('report.fallback_pg_cache_hit_fair') + "{% else %}" + self._t('report.fallback_pg_cache_hit_poor') + "{% endif %}{% endif %}"
             row_cells[0].text = db_tpl
             row_cells[1].text = hit_tpl
             row_cells[2].text = read_tpl
@@ -999,7 +1107,7 @@ class WordTemplateGenerator:
         self.doc.add_paragraph()
 
         # ---- 4.4 数据库大小 ----
-        sub_heading = self.doc.add_heading('4.4 数据库大小', level=2)
+        sub_heading = self.doc.add_heading('4.4 ' + self._l['ch44'], level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=3)
@@ -1009,9 +1117,9 @@ class WordTemplateGenerator:
         table.columns[1].width = Cm(4)
         table.columns[2].width = Cm(6)
         hdr = table.rows[0].cells
-        hdr[0].text = '数据库名'
-        hdr[1].text = '大小'
-        hdr[2].text = '字节数'
+        hdr[0].text = self._l['hdr_db']
+        hdr[1].text = self._l['hdr_size']
+        hdr[2].text = self._t('report.pg_fallback_pg_size_bytes')
         for cell in hdr:
             for p in cell.paragraphs:
                 for r in p.runs:
@@ -1040,13 +1148,13 @@ class WordTemplateGenerator:
         - 5.3 扩展信息：已安装的 PostgreSQL 扩展
         所有值均通过 Jinja2 遍历对应列表填充。
         """
-        heading = self.doc.add_heading('5. 数据库信息', level=1)
+        heading = self.doc.add_heading('5. ' + self._l['ch5'], level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
 
         # ---- 5.1 数据库列表 ----
-        sub_heading = self.doc.add_heading('5.1 数据库列表', level=2)
+        sub_heading = self.doc.add_heading('5.1 ' + self._t('report.pg_ch51'), level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
@@ -1058,11 +1166,11 @@ class WordTemplateGenerator:
         table.columns[3].width = Cm(2)
         table.columns[4].width = Cm(5)
         hdr = table.rows[0].cells
-        hdr[0].text = '数据库名'
-        hdr[1].text = '编码'
-        hdr[2].text = '排序规则'
-        hdr[3].text = '允许连接'
-        hdr[4].text = '连接限制'
+        hdr[0].text = self._l['hdr_db']
+        hdr[1].text = self._t('report.pg_encoding')
+        hdr[2].text = self._t('report.pg_collation')
+        hdr[3].text = self._t('report.pg_allow_conn')
+        hdr[4].text = self._t('report.pg_conn_limit')
         for cell in hdr:
             for p in cell.paragraphs:
                 for r in p.runs:
@@ -1084,7 +1192,7 @@ class WordTemplateGenerator:
         self.doc.add_paragraph()
 
         # ---- 5.2 当前进程列表 ----
-        sub_heading = self.doc.add_heading('5.2 当前进程列表', level=2)
+        sub_heading = self.doc.add_heading('5.2 ' + self._t('report.pg_current_processes'), level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
@@ -1097,10 +1205,10 @@ class WordTemplateGenerator:
         table.columns[4].width = Cm(6)
         hdr = table.rows[0].cells
         hdr[0].text = 'PID'
-        hdr[1].text = '用户'
-        hdr[2].text = '数据库'
-        hdr[3].text = '状态'
-        hdr[4].text = '当前SQL（截断）'
+        hdr[1].text = self._l['hdr_user']
+        hdr[2].text = self._l['hdr_db']
+        hdr[3].text = self._l['hdr_state']
+        hdr[4].text = self._t('report.pg_current_sql')
         for cell in hdr:
             for p in cell.paragraphs:
                 for r in p.runs:
@@ -1122,7 +1230,7 @@ class WordTemplateGenerator:
         self.doc.add_paragraph()
 
         # ---- 5.3 已安装扩展 ----
-        sub_heading = self.doc.add_heading('5.3 已安装扩展', level=2)
+        sub_heading = self.doc.add_heading('5.3 ' + self._t('report.pg_installed_extensions'), level=2)
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=3)
@@ -1132,9 +1240,9 @@ class WordTemplateGenerator:
         table.columns[1].width = Cm(3)
         table.columns[2].width = Cm(7)
         hdr = table.rows[0].cells
-        hdr[0].text = '扩展名'
-        hdr[1].text = '已安装版本'
-        hdr[2].text = '描述'
+        hdr[0].text = self._t('report.pg_extension_name')
+        hdr[1].text = self._t('report.pg_ext_version')
+        hdr[2].text = self._l['hdr_desc']
         for cell in hdr:
             for p in cell.paragraphs:
                 for r in p.runs:
@@ -1159,11 +1267,11 @@ class WordTemplateGenerator:
         （用户名、超级用户、创建数据库权限、创建角色权限、密码过期时间），
         通过 Jinja2 按索引访问 pg_users 列表，最多展示 15 行。
         """
-        heading = self.doc.add_heading('6. 安全信息', level=1)
+        heading = self.doc.add_heading('6. ' + self._l['ch5'], level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
-        sub_heading = self.doc.add_heading('6.1 数据库用户信息', level=2)
+        sub_heading = self.doc.add_heading('6.1 ' + self._l['ch51'], level=2)
         sub_heading_run = sub_heading.runs[0]
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
@@ -1176,11 +1284,11 @@ class WordTemplateGenerator:
         table.columns[3].width = Cm(2)
         table.columns[4].width = Cm(5)
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = '用户名'
-        hdr_cells[1].text = '超级用户'
-        hdr_cells[2].text = '创建数据库'
-        hdr_cells[3].text = '创建角色'
-        hdr_cells[4].text = '密码过期时间'
+        hdr_cells[0].text = self._l['hdr_user']
+        hdr_cells[1].text = self._l['hdr_super']
+        hdr_cells[2].text = self._t('report.pg_createdb')
+        hdr_cells[3].text = self._t('report.pg_createrole')
+        hdr_cells[4].text = self._t('report.pg_validuntil')
         for cell in hdr_cells:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
@@ -1206,16 +1314,16 @@ class WordTemplateGenerator:
         以段落形式输出 5 条固定说明文字，包含：
         报告生成说明、空白项说明、磁盘信息范围说明、巡检结果免责说明、定期巡检建议。
         """
-        heading = self.doc.add_heading('7. 报告说明', level=1)
+        heading = self.doc.add_heading('7. ' + self._l['ch6'], level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
         notes = [
-            "1. 本报告基于PostgreSQL数据库实时状态生成，反映了生成时刻的数据库健康状况",
-            "2. 报告中空白的项表示未能获取到相关数据，可能是由于权限限制或该功能未启用",
-            "3. 磁盘信息仅显示主要分区的使用率，如需查看完整磁盘信息请使用系统命令'df -h'",
-            "4. 巡检结果仅供参考，实际运维中请结合具体业务场景进行分析",
-            "5. 建议定期进行数据库巡检，及时发现并解决潜在问题"
+            self._t('report.fallback_pg_note_1'),
+            self._t('report.fallback_pg_note_2'),
+            self._t('report.fallback_pg_note_3'),
+            self._t('report.fallback_pg_note_4'),
+            self._t('report.fallback_pg_note_5'),
         ]
         for note in notes:
             p = self.doc.add_paragraph()
@@ -1837,6 +1945,19 @@ class getData(object):
             print(_t("pg_cli_db_conn_fail").format(e=e))
             self.conn_db2 = None
         self.context = {}
+        try:
+            from i18n import get_lang
+            self._lang = get_lang()
+        except Exception:
+            self._lang = 'zh'
+
+    def _t(self, key):
+        try:
+            from i18n import t
+            return t(key, self._lang)
+        except Exception:
+            return key
+
     def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█'):
         """
         在终端打印文字版进度条（覆盖当前行）。
@@ -1896,11 +2017,11 @@ class getData(object):
             pg_version_str = version_result[0] if version_result else "Unknown"
             cursor_ver.close()
             self.context.update({"myversion": [{'version': pg_version_str}]})
-            self.context.update({"health_summary": [{'health_summary': '运行良好'}]})
+            self.context.update({"health_summary": [{'health_summary': self._t("report.pg_fallback_health_ok")}]})
         except Exception as e:
             print(_t("pg_cli_version_fail").format(e=e))
             self.context.update({"myversion": [{'version': 'Unknown'}]})
-            self.context.update({"health_summary": [{'health_summary': '运行良好'}]})
+            self.context.update({"health_summary": [{'health_summary': self._t("report.pg_fallback_health_ok")}]})
         try:
             cursor2 = self.conn_db2.cursor()
             variables_items = list(cfg.items("variables"))
@@ -1971,15 +2092,21 @@ class getData(object):
                     usage_pct = float(pg_conn[0].get('usage_percent', 0))
                     if usage_pct > 80:
                         self.context['auto_analyze'].append({
-                            'col1': "连接数使用率", "col2": "高风险",
-                            "col3": f"连接数使用率高达 {usage_pct:.1f}%，接近最大连接数限制",
-                            "col4": "高", "col5": "DBA", "fix_sql": ""
+                            'col1': self._t('report.pg_fallback_conn_usage_label'),
+                            "col2": self._t('report.risk_high'),
+                            "col3": self._t('report.pg_fallback_conn_usage_desc').format(pct=usage_pct),
+                            "col4": self._t('report.pg_fallback_priority_high'),
+                            "col5": self._t('report.pg_fallback_owner_dba'),
+                            "fix_sql": ""
                         })
                 if self.context.get('system_info', {}).get('memory', {}).get('usage_percent', 0) > 90:
                     self.context['auto_analyze'].append({
-                        'col1': "系统内存使用率", "col2": "高风险",
-                        "col3": f"系统内存使用率超过90%",
-                        "col4": "高", "col5": "系统管理员", "fix_sql": ""
+                        'col1': self._t('report.pg_fallback_mem_usage_label'),
+                        'col2': self._t('report.risk_high'),
+                        "col3": self._t('report.pg_fallback_mem_usage_desc'),
+                        "col4": self._t('report.pg_fallback_priority_high'),
+                        "col5": self._t('report.pg_fallback_owner_sysadmin'),
+                        "fix_sql": ""
                     })
         except Exception as e:
             print("\n❌ " + _t("pg_cli_risk_fail").format(e=e))
@@ -2003,7 +2130,7 @@ class getData(object):
             if advisor.enabled:
                 label = self.context.get('co_name', [{}])[0].get('CO_NAME', 'PostgreSQL')
                 print("\n🤖 " + _t("pg_cli_ai_calling").format(backend=advisor.backend, model=advisor.model))
-                ai_advice = advisor.diagnose('pg', label, self.context, issues)
+                ai_advice = advisor.diagnose('pg', label, self.context, issues, lang=self._lang)
                 self.context['ai_advice'] = ai_advice
         except Exception as e:
             self.context['ai_advice'] = ''
@@ -2096,6 +2223,133 @@ class saveDoc(object):
 
             # 尝试使用 docxtpl 正常渲染
             try:
+                # ── 预处理：翻译 auto_analyze 中的 col1/col2 ───────────────
+                _PG_ISSUE_KEY_MAP = {
+                    'report.pg_issue_slow_query_log': 'report.pg_issue_slow_query_log',
+                    'report.pg_issue_shared_buffers_small': 'report.pg_issue_shared_buffers_small',
+                    'report.pg_issue_archive_mode_off': 'report.pg_issue_archive_mode_off',
+                    'report.pg_issue_conn_usage_high': 'report.pg_issue_conn_usage_high',
+                    'report.pg_issue_mem_usage_high': 'report.pg_issue_mem_usage_high',
+                    'report.pg_issue_disk_usage_high': 'report.pg_issue_disk_usage_high',
+                    'report.pg_issue_long_query': 'report.pg_issue_long_query',
+                    'report.pg_issue_cache_hit_low': 'report.pg_issue_cache_hit_low',
+                    'report.pg_issue_lock_wait': 'report.pg_issue_lock_wait',
+                    'report.pg_issue_superuser_many': 'report.pg_issue_superuser_many',
+                    'report.pg_issue_disk_warning': 'report.pg_issue_disk_warning',
+                    'report.pg_issue_dead_tuples': 'report.pg_issue_dead_tuples',
+                }
+                _RISK_KEY_MAP = {
+                    'report.risk_high': 'report.risk_high',
+                    'report.risk_mid': 'report.risk_mid',
+                    'report.risk_low': 'report.risk_low',
+                    'report.risk_suggest': 'report.risk_suggest',
+                }
+                _PG_OWNER_MAP = {
+                    'report.pg_fallback_owner_dba': 'report.pg_fallback_owner_dba',
+                    'report.pg_fallback_owner_sysadmin': 'report.pg_fallback_owner_sysadmin',
+                }
+                _PG_PRIORITY_MAP = {
+                    'report.pg_fallback_priority_high': 'report.pg_fallback_priority_high',
+                    'report.pg_fallback_priority_mid': 'report.pg_fallback_priority_mid',
+                    'report.pg_fallback_priority_low': 'report.pg_fallback_priority_low',
+                }
+                # col3/fix_sql 中文片段翻译映射（analyzer.py 硬编码的中文描述）
+                _COL3_DESC_MAP = {
+                    '（约 ': ' (approx. ',
+                    ' GB），建议设为物理内存的 25%': ' GB), recommended to set to 25% of physical memory',
+                    ' GB），建议设为物理内存的 30%': ' GB), recommended to set to 30% of physical memory',
+                    ' GB），建议设为物理内存的 50%': ' GB), recommended to set to 50% of physical memory',
+                    '），接近上限将拒绝新连接': '), close to limit, will reject new connections',
+                    '），接近上限': '), close to limit',
+                    '），建议关注': '), recommend to monitor',
+                    '），大量数据从磁盘读取': '), large amount of data read from disk',
+                    '（建议 > 99%）': ' (recommend > 99%)',
+                    '（建议 > 95%）': ' (recommend > 95%)',
+                    '），建议执行 VACUUM': '), recommend running VACUUM',
+                    '），建议执行 VACUUM FULL': '), recommend running VACUUM FULL',
+                    '），建议最小化权限': '), recommend minimizing privileges',
+                    '），超级用户仅用于管理': '), superuser only for administration',
+                    '），无法实现 PITR': '), PITR not possible',
+                    '，生产环境建议开启': ', recommend enabling in production',
+                    '），生产环境建议开启': '), recommend enabling in production',
+                    '，生产环境建议开启': ', recommend enabling in production',
+                    '），生产环境建议设为 1': '), recommend setting to 1 in production',
+                    '），生产环境建议设置合理限制': '), recommend setting reasonable limits in production',
+                    '），建议及时清理或扩容': '), recommend cleaning up or expanding capacity',
+                    '），建议限制为本地': '), recommend restricting to localhost',
+                    '），建议限制为本地或特定 IP': '), recommend restricting to localhost or specific IPs',
+                    '），可能频繁开关文件句柄': '), may frequently open/close file handles',
+                    '），复杂应用建议设为 500-2000': '), recommend setting to 500-2000 for complex applications',
+                    '），避免 ORA-01000 错误': ') to avoid ORA-01000 error',
+                    '），合规性要求建议开启': '), compliance requires enabling',
+                    '），无法追踪敏感操作': '), cannot trace sensitive operations',
+                    '），存在严重安全风险': '), serious security risk',
+                    '），存在安全风险': '), security risk',
+                    '），已关闭': '), is disabled',
+                    '未开启': 'not enabled',
+                    '已关闭': 'disabled',
+                    '已移除': 'removed',
+                    '未设置密码': 'no password set',
+                    '允许从任意主机登录': 'allows login from any host',
+                    '建议提前关注': 'recommend proactive monitoring',
+                    '时间点恢复': 'point-in-time recovery',
+                    '无法实现 PITR': 'PITR not possible',
+                }
+                _FIX_SQL_DESC_MAP = {
+                    '-- 修改 postgresql.conf：': '-- Edit postgresql.conf:',
+                    '-- 需要重启 PostgreSQL': '-- PostgreSQL restart required',
+                    '-- 需要重启数据库': '-- Database restart required',
+                    '-- 需要重启生效': '-- Restart required to take effect',
+                    '-- 建议同时使用 PgBouncer 连接池': '-- Recommend using PgBouncer connection pool',
+                    '-- 增大 shared_buffers（建议物理内存的 25%）：': '-- Increase shared_buffers (recommend 25% of physical memory):',
+                    '-- 修改 postgresql.conf': '-- Edit postgresql.conf',
+                    '-- 查看超级用户：': '-- View superusers:',
+                    '-- 撤销多余超级权限：': '-- Revoke unnecessary superuser privileges:',
+                    '-- 查找大表：': '-- Find large tables:',
+                    '-- 或全库：': '-- Or for entire database:',
+                    '-- 检查大对象：': '-- Check large objects:',
+                    '-- 清理方案：': '-- Cleanup plan:',
+                    '-- 1) 删除不需要的对象': '-- 1) Delete unnecessary objects',
+                    '-- 2) TRUNCATE 大表': '-- 2) TRUNCATE large tables',
+                    '-- 3) ALTER TABLESPACE': '-- 3) ALTER TABLESPACE',
+                    '-- 查看 TEMP 使用者：': '-- View TEMP users:',
+                    '-- 查看会话详情：': '-- View session details:',
+                    '-- 调整参数：': '-- Adjust parameters:',
+                    '-- 重启后生效': '-- Takes effect after restart',
+                    '-- 调整 SGA_TARGET（需重启）：': '-- Adjust SGA_TARGET (requires restart):',
+                    '-- 或启用 AMM': '-- Or enable AMM',
+                    '-- 查看日志切换频率：': '-- View log switch frequency:',
+                    '-- 新增日志组：': '-- Add new log groups:',
+                    '-- 开启归档模式（需要重启到 MOUNT 状态）：': '-- Enable archive mode (requires restart to MOUNT state):',
+                    '-- 设置归档路径：': '-- Set archive destination:',
+                }
+                for item in self.context.get('auto_analyze', []):
+                    col1 = item.get('col1', '')
+                    if col1 in _PG_ISSUE_KEY_MAP:
+                        item['col1'] = self._t(_PG_ISSUE_KEY_MAP[col1])
+                    col2 = item.get('col2', '')
+                    if col2 in _RISK_KEY_MAP:
+                        item['col2'] = self._t(_RISK_KEY_MAP[col2])
+                    col3 = item.get('col3', '')
+                    if col3:
+                        # 翻译 col3 中的中文片段（英文环境）
+                        if self._lang != 'zh':
+                            for zh_frag, en_frag in _COL3_DESC_MAP.items():
+                                col3 = col3.replace(zh_frag, en_frag)
+                        item['col3'] = col3
+                    col4 = item.get('col4', '')
+                    if col4 in _PG_PRIORITY_MAP:
+                        item['col4'] = self._t(_PG_PRIORITY_MAP[col4])
+                    col5 = item.get('col5', '')
+                    if col5 in _PG_OWNER_MAP:
+                        item['col5'] = self._t(_PG_OWNER_MAP[col5])
+                    # 翻译 fix_sql 中的中文注释（英文环境）
+                    fix_sql = item.get('fix_sql', '')
+                    if fix_sql and self._lang != 'zh':
+                        for zh_frag, en_frag in _FIX_SQL_DESC_MAP.items():
+                            fix_sql = fix_sql.replace(zh_frag, en_frag)
+                        item['fix_sql'] = fix_sql
+                # ── 渲染 ──────────────────────────────────────────────
                 with open(self.ifile, 'rb') as f:
                     template_bytes = f.read()
                 doc_stream = io.BytesIO(template_bytes)
@@ -2109,7 +2363,7 @@ class saveDoc(object):
                 cutoff_idx = None
                 for i, para in enumerate(doc2.paragraphs):
                     t = para.text.strip()
-                    if t.startswith('7.') and '报告说明' in t:
+                    if t.startswith('7.') and (self._t('report.notes_chapter') in t or '报告说明' in t or 'Report Notes' in t):
                         cutoff_idx = i
                         break
                 if cutoff_idx is not None:
@@ -2137,15 +2391,14 @@ class saveDoc(object):
                 # 7.1 问题明细
                 if auto_analyze:
                     doc2.add_heading('7.1 ' + self._t('report.risk_detail_chapter'), level=2)
-                    col_w = [Cm(0.8), Cm(3.2), Cm(1.5), Cm(4.0), Cm(1.0), Cm(1.5), Cm(4.0)]
                     tbl = doc2.add_table(rows=1+len(auto_analyze), cols=7)
                     tbl.style = 'Light Grid Accent 1'
+                    tbl.autofit = True  # 根据窗口自动调整表格宽度
                     hdrs = [self._t('report.col_seq'), self._t('report.col_risk_item'), self._t('report.col_level'), self._t('report.col_desc'), self._t('report.col_priority'), self._t('report.col_owner'), self._t('report.col_fix')]
                     for j,(cell,ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
                         cell.text = ht
                         cell.paragraphs[0].runs[0].bold = True
                         cell.paragraphs[0].runs[0].font.size = Pt(9)
-                        cell.width = col_w[j]
                     for idx,item in enumerate(auto_analyze,1):
                         row = tbl.rows[idx].cells
                         row[0].text = str(idx)
@@ -2155,14 +2408,17 @@ class saveDoc(object):
                         row[4].text = item.get('col4','')
                         row[5].text = item.get('col5','')
                         fix_sql = item.get('fix_sql','').strip()
-                        row[6].text = fix_sql if fix_sql else '—'
+                        row[6].text = fix_sql if fix_sql else self._t('report.fallback_fix_sql_placeholder')
                         for j,cell in enumerate(row):
                             for para in cell.paragraphs:
                                 for run in para.runs: run.font.size = Pt(9)
-                            cell.width = col_w[j]
                         lvl = item.get('col2','')
-                        cm = {'高风险':RGBColor(0xC0,0x00,0x00),'中风险':RGBColor(0xFF,0x78,0x00),
-                              '低风险':RGBColor(0x37,0x86,0x10),'建议':RGBColor(0x00,0x70,0xC0)}
+                        cm = {
+                            self._t('report.risk_high'): RGBColor(0xC0,0x00,0x00),
+                            self._t('report.risk_mid'): RGBColor(0xFF,0x78,0x00),
+                            self._t('report.risk_low'): RGBColor(0x37,0x86,0x10),
+                            self._t('report.risk_suggest'): RGBColor(0x00,0x70,0xC0)
+                        }
                         if lvl in cm:
                             row[2].paragraphs[0].runs[0].font.color.rgb = cm[lvl]
                             row[2].paragraphs[0].runs[0].bold = True
@@ -2204,12 +2460,12 @@ class saveDoc(object):
                 # 第 9 章 报告说明
                 doc2.add_heading('9. ' + self._t('report.notes_chapter'), level=1)
                 notes = [
-                    "1. 本报告基于 PostgreSQL 数据库实时状态生成，反映了生成时刻的数据库健康状况",
-                    "2. 报告中空白的项表示未能获取到相关数据，可能是由于权限限制或该功能未启用",
-                    "3. 磁盘信息仅显示主要分区的使用率，如需查看完整磁盘信息请使用系统命令 'df -h'",
-                    "4. 巡检结果仅供参考，实际运维中请结合具体业务场景进行分析",
-                    "5. 建议定期进行数据库巡检，及时发现并解决潜在问题",
-                    "6. AI 诊断功能（若启用）生成的建议仅供参考，不构成专业 DBA 意见"
+                    self._t("report.note_1_pg"),
+                    self._t("report.fallback_note_2"),
+                    self._t("report.fallback_note_3"),
+                    self._t("report.fallback_note_4"),
+                    self._t("report.fallback_note_5"),
+                    self._t("report.fallback_note_6")
                 ]
                 for note in notes:
                     doc2.add_paragraph(note)
@@ -2245,9 +2501,78 @@ class saveDoc(object):
 
         :return: 渲染并保存成功返回 True，失败返回 False
         """
+        # col3/fix_sql 中文片段翻译映射（与 contextsave 保持一致）
+        _COL3_DESC_MAP = {
+            '（约 ': ' (approx. ',
+            ' GB），建议设为物理内存的 25%': ' GB), recommended to set to 25% of physical memory',
+            ' GB），建议设为物理内存的 30%': ' GB), recommended to set to 30% of physical memory',
+            ' GB），建议设为物理内存的 50%': ' GB), recommended to set to 50% of physical memory',
+            '），接近上限将拒绝新连接': '), close to limit, will reject new connections',
+            '），接近上限': '), close to limit',
+            '），建议关注': '), recommend to monitor',
+            '），大量数据从磁盘读取': '), large amount of data read from disk',
+            '（建议 > 99%）': ' (recommend > 99%)',
+            '（建议 > 95%）': ' (recommend > 95%)',
+            '），建议执行 VACUUM': '), recommend running VACUUM',
+            '），建议执行 VACUUM FULL': '), recommend running VACUUM FULL',
+            '），建议最小化权限': '), recommend minimizing privileges',
+            '），超级用户仅用于管理': '), superuser only for administration',
+            '），无法实现 PITR': '), PITR not possible',
+            '，生产环境建议开启': ', recommend enabling in production',
+            '），生产环境建议开启': '), recommend enabling in production',
+            '），生产环境建议设为 1': '), recommend setting to 1 in production',
+            '），生产环境建议设置合理限制': '), recommend setting reasonable limits in production',
+            '），建议及时清理或扩容': '), recommend cleaning up or expanding capacity',
+            '），建议限制为本地': '), recommend restricting to localhost',
+            '），建议限制为本地或特定 IP': '), recommend restricting to localhost or specific IPs',
+            '），可能频繁开关文件句柄': '), may frequently open/close file handles',
+            '），复杂应用建议设为 500-2000': '), recommend setting to 500-2000 for complex applications',
+            '），避免 ORA-01000 错误': ') to avoid ORA-01000 error',
+            '），合规性要求建议开启': '), compliance requires enabling',
+            '），无法追踪敏感操作': '), cannot trace sensitive operations',
+            '），存在严重安全风险': '), serious security risk',
+            '），存在安全风险': '), security risk',
+            '），已关闭': '), is disabled',
+            '未开启': 'not enabled',
+            '已关闭': 'disabled',
+            '已移除': 'removed',
+            '未设置密码': 'no password set',
+            '允许从任意主机登录': 'allows login from any host',
+            '建议提前关注': 'recommend proactive monitoring',
+            '时间点恢复': 'point-in-time recovery',
+            '无法实现 PITR': 'PITR not possible',
+        }
+        _FIX_SQL_DESC_MAP = {
+            '-- 修改 postgresql.conf：': '-- Edit postgresql.conf:',
+            '-- 需要重启 PostgreSQL': '-- PostgreSQL restart required',
+            '-- 需要重启数据库': '-- Database restart required',
+            '-- 需要重启生效': '-- Restart required to take effect',
+            '-- 建议同时使用 PgBouncer 连接池': '-- Recommend using PgBouncer connection pool',
+            '-- 增大 shared_buffers（建议物理内存的 25%）：': '-- Increase shared_buffers (recommend 25% of physical memory):',
+            '-- 修改 postgresql.conf': '-- Edit postgresql.conf',
+            '-- 查看超级用户：': '-- View superusers:',
+            '-- 撤销多余超级权限：': '-- Revoke unnecessary superuser privileges:',
+            '-- 查找大表：': '-- Find large tables:',
+            '-- 或全库：': '-- Or for entire database:',
+            '-- 检查大对象：': '-- Check large objects:',
+            '-- 清理方案：': '-- Cleanup plan:',
+            '-- 1) 删除不需要的对象': '-- 1) Delete unnecessary objects',
+            '-- 2) TRUNCATE 大表': '-- 2) TRUNCATE large tables',
+            '-- 3) ALTER TABLESPACE': '-- 3) ALTER TABLESPACE',
+            '-- 查看 TEMP 使用者：': '-- View TEMP users:',
+            '-- 查看会话详情：': '-- View session details:',
+            '-- 调整参数：': '-- Adjust parameters:',
+            '-- 重启后生效': '-- Takes effect after restart',
+            '-- 调整 SGA_TARGET（需重启）：': '-- Adjust SGA_TARGET (requires restart):',
+            '-- 或启用 AMM': '-- Or enable AMM',
+            '-- 查看日志切换频率：': '-- View log switch frequency:',
+            '-- 新增日志组：': '-- Add new log groups:',
+            '-- 开启归档模式（需要重启到 MOUNT 状态）：': '-- Enable archive mode (requires restart to MOUNT state):',
+            '-- 设置归档路径：': '-- Set archive destination:',
+        }
         try:
             doc = Document()
-            title = doc.add_heading('PostgreSQL数据库健康巡检报告', 0)
+            title = doc.add_heading(self._t('report.pg_title'), 0)
             title.alignment = WD_ALIGN_PARAGRAPH.CENTER
             title_run = title.runs[0]
             title_run.font.size = Pt(20)
@@ -2258,14 +2583,14 @@ class saveDoc(object):
             table.columns[0].width = Cm(4)
             table.columns[1].width = Cm(10)
             data_map = [
-                ("数据库名称", self.context.get('co_name', [{}])[0].get('CO_NAME', 'N/A')),
-                ("服务器地址", f"{self.context.get('ip', [{}])[0].get('IP', 'N/A')}:{self.context.get('port', [{}])[0].get('PORT', 'N/A')}"),
-                ("PostgreSQL版本", self.context.get('myversion', [{}])[0].get('version', 'N/A')),
-                ("服务器主机名", self.context.get('system_info', {}).get('hostname', 'N/A')),
-                ("实例启动时间", self.context.get('pg_uptime', [{}])[0].get('started_at', 'N/A') if self.context.get('pg_uptime') else 'N/A'),
-                ("巡检人员", self.inspector_name),
-                ("服务器平台", self._get_platform_info()),
-                ("报告生成时间", self.context.get('report_time', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                (self._t("report.fallback_db_name"), self.context.get('co_name', [{}])[0].get('CO_NAME', 'N/A')),
+                (self._t("report.fallback_server_addr"), f"{self.context.get('ip', [{}])[0].get('IP', 'N/A')}:{self.context.get('port', [{}])[0].get('PORT', 'N/A')}"),
+                (self._t("report.fallback_pg_version"), self.context.get('myversion', [{}])[0].get('version', 'N/A')),
+                (self._t("report.fallback_hostname"), self.context.get('system_info', {}).get('hostname', 'N/A')),
+                (self._t("report.fallback_pg_start_time"), self.context.get('pg_uptime', [{}])[0].get('started_at', 'N/A') if self.context.get('pg_uptime') else 'N/A'),
+                (self._t("report.fallback_inspector"), self.inspector_name),
+                (self._t("report.fallback_platform"), self._get_platform_info()),
+                (self._t("report.fallback_report_time"), self.context.get('report_time', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
             ]
             for i, (label, value) in enumerate(data_map):
                 cells = table.rows[i].cells
@@ -2276,29 +2601,32 @@ class saveDoc(object):
                         for run in paragraph.runs:
                             run.font.size = Pt(11)
             doc.add_page_break()
-            doc.add_heading('1. 健康状态概览', level=1)
+            doc.add_heading('1. ' + self._t('report.fallback_health_overview'), level=1)
             table = doc.add_table(rows=2, cols=2)
             table.style = 'Light Grid Accent 1'
             table.columns[0].width = Cm(4)
             table.columns[1].width = Cm(10)
             cells = table.rows[0].cells
-            cells[0].text = "总体健康状态"
+            cells[0].text = self._t("report.fallback_overall_health")
             cells[1].text = self.context.get('health_status', 'N/A')
             cells = table.rows[1].cells
-            cells[0].text = "发现问题数量"
-            cells[1].text = f"{self.context.get('problem_count', 0)} 个"
+            cells[0].text = self._t("report.fallback_issue_count")
+            cells[1].text = f"{self.context.get('problem_count', 0)}"
             doc.add_paragraph()
-            p = doc.add_paragraph("健康总结: ")
-            p.add_run(self.context.get('health_summary', [{}])[0].get('health_summary', '运行良好')).bold = True
+            p = doc.add_paragraph(self._t("report.fallback_health_summary") + ": ")
+            p.add_run(self.context.get('health_summary', [{}])[0].get('health_summary', self._t('report.running_ok'))).bold = True
 
-            doc.add_heading('2. 系统资源检查', level=1)
+            doc.add_heading('2. ' + self._t('report.fallback_system_check'), level=1)
             cpu = self.context.get('system_info', {}).get('cpu', {})
             mem = self.context.get('system_info', {}).get('memory', {})
-            doc.add_heading('2.1 CPU信息', level=2)
+            doc.add_heading('2.1 ' + self._t('report.fallback_cpu_info'), level=2)
             table = doc.add_table(rows=2, cols=4)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = 'CPU使用率', '物理核心数', '逻辑核心数', '当前频率(GHz)'
+            hdr[0].text = self._t('report.fallback_cpu_usage')
+            hdr[1].text = self._t('report.fallback_physical_cores')
+            hdr[2].text = self._t('report.fallback_logical_cores')
+            hdr[3].text = self._t('report.fallback_freq_ghz')
             row = table.rows[1].cells
             row[0].text = f"{cpu.get('usage_percent', 'N/A')}%"
             row[1].text = str(cpu.get('physical_cores', 'N/A'))
@@ -2306,31 +2634,35 @@ class saveDoc(object):
             freq = cpu.get('current_frequency', 0)
             row[3].text = f"{freq/1000:.2f}" if isinstance(freq, (int, float)) and freq > 100 else str(freq)
             doc.add_paragraph()
-            doc.add_heading('2.2 内存信息', level=2)
+            doc.add_heading('2.2 ' + self._t('report.fallback_memory_info'), level=2)
             table = doc.add_table(rows=2, cols=4)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = '总内存(GB)', '已使用(GB)', '可用内存(GB)', '使用率'
+            hdr[0].text = self._t('report.fallback_total_gb')
+            hdr[1].text = self._t('report.fallback_used_gb')
+            hdr[2].text = self._t('report.fallback_available_gb')
+            hdr[3].text = self._t('report.fallback_usage_pct')
             row = table.rows[1].cells
             row[0].text = f"{mem.get('total_gb', 'N/A')}"
             row[1].text = f"{mem.get('used_gb', 'N/A')}"
             row[2].text = f"{mem.get('available_gb', 'N/A')}"
             row[3].text = f"{mem.get('usage_percent', 'N/A')}%"
             doc.add_paragraph()
-            doc.add_heading('2.3 磁盘信息', level=2)
+            doc.add_heading('2.3 ' + self._t('report.fallback_disk_info'), level=2)
             disk_list = self.context.get('system_info', {}).get('disk_list', [])
             table = doc.add_table(rows=1+len(disk_list), cols=2)
             table.style = 'Light Grid Accent 1'
             table.columns[0].width = Cm(8)
             table.columns[1].width = Cm(4)
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text = '挂载点', '使用率'
+            hdr[0].text = self._t('report.fallback_mountpoint')
+            hdr[1].text = self._t('report.fallback_usage_pct')
             for i, disk in enumerate(disk_list, 1):
                 cells = table.rows[i].cells
                 cells[0].text = disk.get('mountpoint', 'N/A')
                 cells[1].text = f"{disk.get('usage_percent', 0):.2f}%"
 
-            doc.add_heading('3. PostgreSQL配置检查', level=1)
+            doc.add_heading('3. ' + self._t('report.fallback_pg_config'), level=1)
             # 从 pg_settings_key 列表中提取配置值
             pg_sk = self.context.get('pg_settings_key', [])
             def _pg_setting(name):
@@ -2339,58 +2671,63 @@ class saveDoc(object):
                         return item.get('setting', 'N/A')
                 return 'N/A'
 
-            doc.add_heading('3.1 连接与内存配置', level=2)
+            doc.add_heading('3.1 ' + self._t('report.fallback_pg_conn_mem'), level=2)
             pg_conn = self.context.get('pg_connections', [])
             conn_total = pg_conn[0].get('total_connections', 'N/A') if pg_conn else 'N/A'
             conn_max = pg_conn[0].get('max_connections', 'N/A') if pg_conn else 'N/A'
             self._add_config_table_pg(doc, [
-                ('最大连接数', conn_max), ('当前连接数', conn_total),
-                ('共享缓冲区', _pg_setting('shared_buffers')),
-                ('工作内存', _pg_setting('work_mem')),
-                ('维护内存', _pg_setting('maintenance_work_mem')),
-                ('有效缓存大小', _pg_setting('effective_cache_size')),
+                (self._t('report.fallback_pg_max_conn'), conn_max),
+                (self._t('report.fallback_pg_cur_conn'), conn_total),
+                (self._t('report.fallback_pg_shared_buf'), _pg_setting('shared_buffers')),
+                (self._t('report.fallback_pg_work_mem'), _pg_setting('work_mem')),
+                (self._t('report.fallback_pg_maint_mem'), _pg_setting('maintenance_work_mem')),
+                (self._t('report.fallback_pg_eff_cache'), _pg_setting('effective_cache_size')),
             ])
-            doc.add_heading('3.2 WAL 与检查点配置', level=2)
+            doc.add_heading('3.2 ' + self._t('report.fallback_pg_wal_checkpoint'), level=2)
             self._add_config_table_pg(doc, [
-                ('WAL 级别', _pg_setting('wal_level')),
-                ('最大 WAL 大小', _pg_setting('max_wal_size')),
-                ('检查点完成目标', _pg_setting('checkpoint_completion_target')),
-                ('随机页面代价', _pg_setting('random_page_cost')),
+                (self._t('report.fallback_pg_wal_level'), _pg_setting('wal_level')),
+                (self._t('report.fallback_pg_max_wal'), _pg_setting('max_wal_size')),
+                (self._t('report.fallback_pg_ckpt_target'), _pg_setting('checkpoint_completion_target')),
+                (self._t('report.fallback_pg_random_page'), _pg_setting('random_page_cost')),
             ])
-            doc.add_heading('3.3 自动清理配置', level=2)
+            doc.add_heading('3.3 ' + self._t('report.fallback_pg_autovacuum'), level=2)
             self._add_config_table_pg(doc, [
-                ('自动 Vacuum', _pg_setting('autovacuum')),
-                ('Vacuum 比例因子', _pg_setting('autovacuum_vacuum_scale_factor')),
-                ('Analyze 比例因子', _pg_setting('autovacuum_analyze_scale_factor')),
-                ('慢查询阈值(ms)', _pg_setting('log_min_duration_statement')),
+                (self._t('report.fallback_pg_autovac'), _pg_setting('autovacuum')),
+                (self._t('report.fallback_pg_vac_scale'), _pg_setting('autovacuum_vacuum_scale_factor')),
+                (self._t('report.fallback_pg_analyze_scale'), _pg_setting('autovacuum_analyze_scale_factor')),
+                (self._t('report.fallback_pg_slow_query'), _pg_setting('log_min_duration_statement')),
             ])
 
-            doc.add_heading('4. 性能分析', level=1)
-            doc.add_heading('4.1 连接状态', level=2)
+            doc.add_heading('4. ' + self._t('report.fallback_pg_perf'), level=1)
+            doc.add_heading('4.1 ' + self._t('report.fallback_pg_conn_status'), level=2)
             self._add_config_table_pg(doc, [
-                ('当前连接数', conn_total),
-                ('最大连接数', conn_max),
-                ('连接使用率(%)', pg_conn[0].get('usage_percent', 'N/A') if pg_conn else 'N/A'),
+                (self._t('report.fallback_pg_cur_conn'), conn_total),
+                (self._t('report.fallback_pg_max_conn'), conn_max),
+                (self._t('report.fallback_pg_conn_usage'), pg_conn[0].get('usage_percent', 'N/A') if pg_conn else 'N/A'),
             ])
-            doc.add_heading('4.2 缓存命中率', level=2)
+            doc.add_heading('4.2 ' + self._t('report.fallback_pg_cache_hit'), level=2)
             pg_ch = self.context.get('pg_cache_hit', [])
-            cache_rows = [('数据库', '命中率(%)')] + [(d.get('datname', ''), d.get('cache_hit_ratio', '')) for d in pg_ch[:8]]
+            cache_rows = [(self._t('report.fallback_pg_dbname'), self._t('report.fallback_pg_cache_hit'))] + [(d.get('datname', ''), d.get('cache_hit_ratio', '')) for d in pg_ch[:8]]
             for row_data in cache_rows:
                 p = doc.add_paragraph(f"{row_data[0]}: {row_data[1]}%")
-                p.runs[0].font.size = Pt(10)
-            doc.add_heading('4.3 数据库大小', level=2)
+                if p.runs:
+                    p.runs[0].font.size = Pt(10)
+            doc.add_heading('4.3 ' + self._t('report.fallback_pg_db_size'), level=2)
             pg_db = self.context.get('pg_db_size', [])
             for d in pg_db[:8]:
                 p = doc.add_paragraph(f"  {d.get('database_name', '')}: {d.get('size', '')}")
-                p.runs[0].font.size = Pt(10)
+                if p.runs:
+                    p.runs[0].font.size = Pt(10)
 
-            doc.add_heading('5. 数据库信息', level=1)
-            doc.add_heading('5.1 数据库列表', level=2)
+            doc.add_heading('5. ' + self._t('report.fallback_pg_db_info'), level=1)
+            doc.add_heading('5.1 ' + self._t('report.fallback_pg_db_list'), level=2)
             pg_db2 = self.context.get('pg_databases', [])
             table = doc.add_table(rows=1+min(len(pg_db2), 10), cols=3)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text = '数据库名', '编码', '允许连接'
+            hdr[0].text = self._t('report.fallback_pg_dbname')
+            hdr[1].text = self._t('report.fallback_pg_encoding')
+            hdr[2].text = self._t('report.fallback_pg_allow_conn')
             for i, db in enumerate(pg_db2[:10], 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(db.get('datname', ''))
@@ -2400,12 +2737,16 @@ class saveDoc(object):
                     for par in cell.paragraphs:
                         for r in par.runs:
                             r.font.size = Pt(10)
-            doc.add_heading('5.2 当前进程列表', level=2)
+            doc.add_heading('5.2 ' + self._t('report.fallback_pg_proc_list'), level=2)
             proc = self.context.get('pg_processlist', [])
             table = doc.add_table(rows=1+min(len(proc), 15), cols=5)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text = 'PID', '用户', '数据库', '状态', '当前SQL(截断)'
+            hdr[0].text = self._t('report.fallback_pg_pid')
+            hdr[1].text = self._t('report.fallback_pg_pg_user')
+            hdr[2].text = self._t('report.fallback_pg_pg_db')
+            hdr[3].text = self._t('report.fallback_pg_pg_state')
+            hdr[4].text = self._t('report.fallback_pg_curr_sql')
             for i, p in enumerate(proc[:15], 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(p.get('pid', ''))
@@ -2418,13 +2759,17 @@ class saveDoc(object):
                         for r in par.runs:
                             r.font.size = Pt(9)
 
-            doc.add_heading('6. 安全信息', level=1)
-            doc.add_heading('6.1 数据库用户信息', level=2)
+            doc.add_heading('6. ' + self._t('report.fallback_pg_security'), level=1)
+            doc.add_heading('6.1 ' + self._t('report.fallback_pg_db_users'), level=2)
             users = self.context.get('pg_users', [])
             table = doc.add_table(rows=1+min(len(users), 15), cols=5)
             table.style = 'Light Grid Accent 1'
             hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text = '用户名', '超级用户', '创建数据库', '创建角色', '密码过期'
+            hdr[0].text = self._t('report.fallback_pg_username')
+            hdr[1].text = self._t('report.fallback_pg_superuser')
+            hdr[2].text = self._t('report.fallback_pg_can_createdb')
+            hdr[3].text = self._t('report.fallback_pg_can_createrole')
+            hdr[4].text = self._t('report.fallback_pg_pass_expire')
             for i, u in enumerate(users[:15], 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(u.get('username', ''))
@@ -2437,82 +2782,123 @@ class saveDoc(object):
                         for r in par.runs:
                             r.font.size = Pt(9)
 
-            doc.add_heading('7. 风险与建议', level=1)
+            doc.add_heading('7. ' + self._t('report.fallback_pg_risk_chapter'), level=1)
 
             # ── 7.1 概览统计 ──
             auto_analyze = self.context.get('auto_analyze', [])
-            high_risk  = [i for i in auto_analyze if i.get('col2') == '高风险']
-            mid_risk   = [i for i in auto_analyze if i.get('col2') == '中风险']
-            low_risk   = [i for i in auto_analyze if i.get('col2') in ('低风险', '建议')]
+            high_risk  = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_high')]
+            mid_risk   = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_mid')]
+            low_risk   = [i for i in auto_analyze if i.get('col2') in (self._t('report.risk_low'), self._t('report.risk_suggest'))]
             p = doc.add_paragraph()
-            p.add_run('本次共检测到 ').bold = False
+            p.add_run(self._t('report.fallback_detected_prefix')).bold = False
             if high_risk:
-                run_h = p.add_run(f'{len(high_risk)} 项高风险')
+                run_h = p.add_run(f'{len(high_risk)}' + self._t('report.fallback_high_risk_n'))
                 run_h.bold = True; run_h.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
             if mid_risk:
-                run_m = p.add_run(f' {len(mid_risk)} 项中风险')
+                run_m = p.add_run(f' {len(mid_risk)}' + self._t('report.fallback_mid_risk_n'))
                 run_m.bold = True; run_m.font.color.rgb = RGBColor(0xFF, 0x78, 0x00)
             if low_risk:
-                run_l = p.add_run(f' {len(low_risk)} 项低风险/建议')
+                run_l = p.add_run(f' {len(low_risk)}' + self._t('report.fallback_low_risk_n'))
                 run_l.bold = True; run_l.font.color.rgb = RGBColor(0x37, 0x86, 0x10)
-            p.add_run(f'，共计 {len(auto_analyze)} 项问题。')
+            p.add_run(self._t('report.fallback_detected_suffix2').format(c=len(auto_analyze)))
 
             # ── 7.2 风险明细表格 ──
             if auto_analyze:
-                doc.add_heading('7.1 问题明细', level=2)
-                col_widths = [Cm(0.8), Cm(3.2), Cm(1.5), Cm(4.0), Cm(1.0), Cm(1.5), Cm(4.0)]
+                doc.add_heading('7.1 ' + self._t('report.fallback_pg_issue_detail'), level=2)
                 tbl = doc.add_table(rows=1 + len(auto_analyze), cols=7)
                 tbl.style = 'Light Grid Accent 1'
+                tbl.autofit = True  # 根据窗口自动调整表格宽度
                 hdr = tbl.rows[0].cells
-                headers = ['序号', '风险项', '等级', '详细描述', '优先级', '负责人', '修复建议']
+                headers = [
+                    self._t('report.fallback_seq'),
+                    self._t('report.fallback_risk_item'),
+                    self._t('report.fallback_level'),
+                    self._t('report.fallback_desc'),
+                    self._t('report.fallback_priority'),
+                    self._t('report.fallback_owner'),
+                    self._t('report.fallback_fix_suggest')
+                ]
                 for j, (cell, hdr_text) in enumerate(zip(hdr, headers)):
                     cell.text = hdr_text
                     cell.paragraphs[0].runs[0].bold = True
                     cell.paragraphs[0].runs[0].font.size = Pt(9)
-                    cell.width = col_widths[j]
                 for idx, item in enumerate(auto_analyze, 1):
                     row = tbl.rows[idx].cells
                     row[0].text = str(idx)
-                    row[1].text = item.get('col1', '')
-                    row[2].text = item.get('col2', '')
-                    row[3].text = item.get('col3', '')
-                    row[4].text = item.get('col4', '')
-                    row[5].text = item.get('col5', '')
+                    # 翻译 col1/col2/col4/col5（analyzer.py 使用翻译 key）
+                    col1_val = item.get('col1', '')
+                    if col1_val.startswith('report.'):
+                        col1_val = self._t(col1_val)
+                    row[1].text = col1_val
+                    col2_val = item.get('col2', '')
+                    if col2_val.startswith('report.'):
+                        col2_val = self._t(col2_val)
+                    row[2].text = col2_val
+                    # 翻译 col3（analyzer.py 硬编码的中文描述）
+                    col3_val = item.get('col3', '')
+                    if col3_val and self._lang != 'zh':
+                        for zh_frag, en_frag in _COL3_DESC_MAP.items():
+                            col3_val = col3_val.replace(zh_frag, en_frag)
+                    row[3].text = col3_val
+                    col4_val = item.get('col4', '')
+                    if col4_val.startswith('report.'):
+                        col4_val = self._t(col4_val)
+                    row[4].text = col4_val
+                    col5_val = item.get('col5', '')
+                    if col5_val.startswith('report.'):
+                        col5_val = self._t(col5_val)
+                    row[5].text = col5_val
                     fix_sql = item.get('fix_sql', '').strip()
-                    row[6].text = fix_sql if fix_sql else '—'
+                    if fix_sql and self._lang != 'zh':
+                        for zh_frag, en_frag in _FIX_SQL_DESC_MAP.items():
+                            fix_sql = fix_sql.replace(zh_frag, en_frag)
+                    row[6].text = fix_sql if fix_sql else self._t('report.fallback_fix_sql_placeholder')
                     for j, cell in enumerate(row):
                         for para in cell.paragraphs:
                             for run in para.runs:
                                 run.font.size = Pt(9)
-                        cell.width = col_widths[j]
-                    level = item.get('col2', '')
-                    color_map = {'高风险': RGBColor(0xC0, 0x00, 0x00),
-                                 '中风险': RGBColor(0xFF, 0x78, 0x00),
-                                 '低风险': RGBColor(0x37, 0x86, 0x10),
-                                 '建议':   RGBColor(0x00, 0x70, 0xC0)}
-                    if level in color_map:
-                        row[2].paragraphs[0].runs[0].font.color.rgb = color_map[level]
+                    # col2 is already translated, compare with translated risk strings
+                    color_map = {
+                        self._t('report.risk_high'): RGBColor(0xC0, 0x00, 0x00),
+                        self._t('report.risk_mid'): RGBColor(0xFF, 0x78, 0x00),
+                        self._t('report.risk_low'): RGBColor(0x37, 0x86, 0x10),
+                        self._t('report.risk_suggest'): RGBColor(0x00, 0x70, 0xC0)
+                    }
+                    if col2_val in color_map:
+                        row[2].paragraphs[0].runs[0].font.color.rgb = color_map[col2_val]
                         row[2].paragraphs[0].runs[0].bold = True
             else:
-                doc.add_paragraph('✅ 未发现明显风险项，PostgreSQL 数据库运行状态良好。')
+                doc.add_paragraph(self._t('report.fallback_pg_no_risk_found'))
 
             # ── 7.3 修复速查 ──
             fix_items = [i for i in auto_analyze if i.get('fix_sql', '').strip()]
             if fix_items:
-                doc.add_heading('7.2 修复速查', level=2)
+                doc.add_heading('7.2 ' + self._t('report.fallback_pg_fix_chapter'), level=2)
                 for idx, item in enumerate(fix_items, 1):
                     p = doc.add_paragraph()
-                    p.add_run(f'{idx}. [{item.get("col1")}] {item.get("col3")[:60]}').bold = True
-                    code_p = doc.add_paragraph(item.get('fix_sql', '').strip())
+                    col1_val = item.get('col1', '')
+                    if col1_val.startswith('report.'):
+                        col1_val = self._t(col1_val)
+                    col3_raw = item.get('col3', '')[:60]
+                    if self._lang != 'zh':
+                        for zh_frag, en_frag in _COL3_DESC_MAP.items():
+                            col3_raw = col3_raw.replace(zh_frag, en_frag)
+                    p.add_run(f'{idx}. [{col1_val}] {col3_raw}').bold = True
+                    fix_sql_raw = item.get('fix_sql', '').strip()
+                    if self._lang != 'zh':
+                        for zh_frag, en_frag in _FIX_SQL_DESC_MAP.items():
+                            fix_sql_raw = fix_sql_raw.replace(zh_frag, en_frag)
+                    code_p = doc.add_paragraph(fix_sql_raw)
                     code_p.style = 'Quote'
-                    code_p.runs[0].font.size = Pt(9)
+                    if code_p.runs:
+                        code_p.runs[0].font.size = Pt(9)
 
             # ── 8. AI 智能诊断建议 ──
             ai_advice = self.context.get('ai_advice', '').strip()
-            doc.add_heading('8. AI 智能诊断建议', level=1)
+            doc.add_heading('8. ' + self._t('report.fallback_pg_ai_chapter'), level=1)
             if ai_advice:
                 p = doc.add_paragraph()
-                p.add_run('🤖 以下建议由 AI 大模型基于本次巡检数据自动生成，仅供参考，实际操作请结合业务场景谨慎评估。').italic = True
+                p.add_run(self._t('report.fallback_pg_ai_disclaimer')).italic = True
                 doc.add_paragraph()
                 for line in ai_advice.split('\n'):
                     line = line.strip()
@@ -2522,20 +2908,21 @@ class saveDoc(object):
                         p = doc.add_paragraph(style='List Bullet')
                         p.add_run(line[2:]).font.size = Pt(11)
                     else:
-                        doc.add_paragraph(line).runs[0].font.size = Pt(11)
+                        if doc.add_paragraph(line).runs:
+                            doc.paragraphs[-1].runs[0].font.size = Pt(11)
             else:
                 p = doc.add_paragraph()
                 p.add_run(self._t('report.ai_disabled')).italic = True
 
             # ── 9. 报告说明 ──
-            doc.add_heading('9. 报告说明', level=1)
+            doc.add_heading('9. ' + self._t('report.fallback_pg_notes_chapter'), level=1)
             notes = [
-                "1. 本报告基于 PostgreSQL 数据库实时状态生成，反映了生成时刻的数据库健康状况",
-                "2. 报告中空白的项表示未能获取到相关数据，可能是由于权限限制或该功能未启用",
-                "3. 磁盘信息仅显示主要分区的使用率，如需查看完整磁盘信息请使用系统命令 'df -h'",
-                "4. 巡检结果仅供参考，实际运维中请结合具体业务场景进行分析",
-                "5. 建议定期进行数据库巡检，及时发现并解决潜在问题",
-                "6. AI 诊断功能（若启用）生成的建议仅供参考，不构成专业 DBA 意见"
+                self._t("report.fallback_pg_note_1"),
+                self._t("report.fallback_pg_note_2"),
+                self._t("report.fallback_pg_note_3"),
+                self._t("report.fallback_pg_note_4"),
+                self._t("report.fallback_pg_note_5"),
+                self._t("report.fallback_pg_note_6")
             ]
             for note in notes:
                 doc.add_paragraph(note)
@@ -2544,7 +2931,7 @@ class saveDoc(object):
             pass  # 备用渲染成功
             return True
         except Exception as e:
-            pass  # 备用渲染失败
+            print(f"{self._t('report.fallback_pg_render_fail')}: {e}")
             import traceback
             traceback.print_exc()
             return False

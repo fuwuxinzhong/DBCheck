@@ -25,6 +25,7 @@ import re
 import time
 from pathlib import Path
 import sys, getopt, os
+import getpass
 import docx
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
@@ -142,6 +143,15 @@ dm_partition_info = SELECT TABLE_OWNER, TABLE_NAME, PARTITION_NAME, HIGH_VALUE, 
 
 # ── 20. 资源限制 ─────────────────────────────
 dm_resource       = SELECT NAME, TYPE, SPACE_LIMIT, SPACE_USED FROM V$RESOURCE_LIMIT;
+
+# ── 21. 长时间运行的SQL（V$LONG_EXEC_SQLS）──────
+dm_long_sql       = SELECT SQL_TEXT, EXEC_TIME, SESS_ID, N_RUNS, FINISH_TIME FROM V$LONG_EXEC_SQLS ORDER BY EXEC_TIME DESC LIMIT 50;
+
+# ── 22. Top SQL（按执行时间排序）───────────────
+dm_top_sql_cpu    = SELECT SQL_TEXT, EXEC_TIME, N_RUNS, SESS_ID FROM V$LONG_EXEC_SQLS ORDER BY N_RUNS DESC LIMIT 30;
+
+# ── 23. Undo 信息 ───────────────────────────
+dm_undo_info      = SELECT NAME AS TABLESPACE_NAME, TYPE$ AS TABLESPACE_TYPE, STATUS$ AS TS_STATUS FROM V$TABLESPACE;
 """
 
 
@@ -485,13 +495,13 @@ def analyze_health_status(context):
     score = max(0, min(100, score))
 
     if critical_n > 0:
-        status = "严重"
+        status = _t('report.dm_status_critical')
     elif warning_n >= 4:
-        status = "警告"
+        status = _t('report.dm_status_warning')
     elif warning_n > 0:
-        status = "一般"
+        status = _t('report.dm_status_general')
     else:
-        status = "正常"
+        status = _t('report.dm_health_status_ok')
 
     return {
         "status": status,
@@ -553,20 +563,20 @@ def create_word_template(inspector_name="Jack"):
     heading2.font.name = '微软雅黑'
 
     # 封面标题（二号）
-    doc.add_paragraph("达梦数据库健康巡检报告", style='ReportTitle')
+    doc.add_paragraph(self._t("report.dm_title"), style='ReportTitle')
     doc.add_paragraph("")
 
     # 封面信息表
     info_table = doc.add_table(rows=8, cols=2)
     info_cells = [
-        ("数据库名称",     "{{{ co_name }}}"),
-        ("服务器地址",     "{{{ server_addr }}}"),
-        ("达梦版本",       "{{{ dm_version }}}"),
-        ("服务器主机名",   "{{{ hostname }}}"),
-        ("实例启动时间",   "{{{ uptime_text }}}"),
-        ("巡检人员",       inspector_name),
-        ("服务器平台",     "{{{ platform_text }}}"),
-        ("报告生成时间",   "{{{ report_time }}}"),
+        (self._t('report.dm_fallback_db_name'),     "{{{ co_name }}}"),
+        (self._t('report.dm_fallback_server_addr'), "{{{ server_addr }}}"),
+        (self._t('report.dm_fallback_version'),      "{{{ dm_version }}}"),
+        (self._t('report.dm_fallback_hostname'),    "{{{ hostname }}}"),
+        (self._t('report.dm_fallback_instance_time'), "{{{ uptime_text }}}"),
+        (self._t('report.dm_fallback_inspector'),   inspector_name),
+        (self._t('report.dm_fallback_platform'),   "{{{ platform_text }}}"),
+        (self._t('report.dm_fallback_report_time'), "{{{ report_time }}}"),
     ]
     for i, (label, value) in enumerate(info_cells):
         info_table.cell(i, 0).text = label
@@ -574,38 +584,38 @@ def create_word_template(inspector_name="Jack"):
     info_table.style = 'Table Grid'
 
     # 章节占位符
-    doc.add_paragraph("\n第1章 数据库基本信息", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_ch1"), style='Heading1Custom')
     doc.add_paragraph("{{{ dm_instance }}}")
 
-    doc.add_paragraph("\n第2章 巡检执行摘要", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_ch2"), style='Heading1Custom')
     doc.add_paragraph("{{{ health_summary_text }}}")
     doc.add_paragraph("{{{ error_summary_text }}}")
 
-    doc.add_paragraph("\n第3章 表空间使用情况", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_ch3"), style='Heading1Custom')
     doc.add_paragraph("{{{ dm_tablespace }}}")
 
-    doc.add_paragraph("\n第4章 会话与事务", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_ch4"), style='Heading1Custom')
     doc.add_paragraph("{{{ dm_sessions }}}")
     doc.add_paragraph("{{{ dm_trx }}}")
 
-    doc.add_paragraph("\n第5章 内存分析", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_ch5"), style='Heading1Custom')
     doc.add_paragraph("{{{ dm_sga }}}")
     doc.add_paragraph("{{{ dm_memory_info }}}")
 
-    doc.add_paragraph("\n第6章 重做日志与归档", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_ch6"), style='Heading1Custom')
     doc.add_paragraph("{{{ dm_redo_logs }}}")
 
-    doc.add_paragraph("\n第7章 系统资源监控", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_ch7"), style='Heading1Custom')
     doc.add_paragraph("{{{ system_info_text }}}")
 
-    doc.add_paragraph("\n第8章 对象与用户安全", style='Heading1Custom')
-    doc.add_paragraph("8.1 无效对象\n{{{ dm_invalid_cnt }}}")
-    doc.add_paragraph("8.2 用户列表\n{{{ dm_users }}}")
+    doc.add_paragraph("\n" + self._t("report.dm_ch8"), style='Heading1Custom')
+    doc.add_paragraph(self._t("report.dm_ch81") + "\n{{{ dm_invalid_cnt }}}")
+    doc.add_paragraph(self._t("report.dm_ch82") + "\n{{{ dm_users }}}")
 
-    doc.add_paragraph("\n第9章 备份与归档", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_ch9"), style='Heading1Custom')
     doc.add_paragraph("{{{ dm_backup }}}")
 
-    doc.add_paragraph("\n第10章 报告说明", style='Heading1Custom')
+    doc.add_paragraph("\n" + self._t("report.dm_fallback_notes_chapter"), style='Heading1Custom')
     doc.add_paragraph("{{{ notes_text }}}")
 
     os.makedirs(template_path, exist_ok=True)
@@ -774,7 +784,8 @@ class getData(object):
             "dm_long_sql", "dm_top_sql_cpu",
             "dm_rss_status", "dm_rss_apply",
             "dm_dcinfo", "dm_inst_info",
-            "dm_undo_info", "dm_transactions",
+            "dm_undo_info",
+            "dm_transactions",
             "dm_recyclebin",
             "dm_datafiles",
             "dm_profile_pwd",
@@ -908,7 +919,7 @@ class getData(object):
             if advisor.enabled:
                 label = self.context.get('co_name', [{}])[0].get('DB_NAME', 'DM8')
                 print(_t("dm8_ai_calling").format(backend=advisor.backend, model=advisor.model))
-                ai_advice = advisor.diagnose('dm8', label, self.context, self.context.get('auto_analyze', []))
+                ai_advice = advisor.diagnose('dm8', label, self.context, self.context.get('auto_analyze', []), lang=self._lang)
                 self.context['ai_advice'] = ai_advice
         except Exception:
             self.context['ai_advice'] = ''
@@ -1078,7 +1089,7 @@ class saveDoc(object):
             else:
                 self.context['co_name'] = str(self.context.get('co_name', '') or '')
             if isinstance(self.context.get('dm_version'), list) and len(self.context['dm_version']) > 0:
-                self.context['dm_version'] = str(self.context['dm_version'][0].get('BANNER', ''))
+                self.context['dm_version'] = str(self.context['dm_version'][0].get('SVR_VERSION', '') or '')
             else:
                 self.context['dm_version'] = str(self.context.get('dm_version', '') or '')
 
@@ -1108,27 +1119,27 @@ class saveDoc(object):
             mem = sys_info.get('memory', {}) or {}
             disks = sys_info.get('disk_list', []) or []
             lines = []
-            lines.append(f"CPU 使用率\t{cpu.get('usage_percent', 'N/A')}%")
+            lines.append(f"{self._t('report.dm_cpu_usage')}\t{cpu.get('usage_percent', 'N/A')}%")
             used_mb = mem.get('used_mb', 0)
             total_mb = mem.get('total_mb', 0)
             mem_pct = mem.get('usage_percent', 0)
-            lines.append(f"内存使用\t{used_mb} MB / {total_mb} MB ({mem_pct}%)")
+            lines.append(f"{self._t('report.dm_mem_usage')}\t{used_mb} MB / {total_mb} MB ({mem_pct}%)")
             for d in disks[:10] if disks else []:
                 mp = d.get('mountpoint', '/')
                 tg = d.get('total_gb', 0)
                 ug = d.get('used_gb', 0)
                 up = d.get('usage_percent', 0)
-                lines.append(f"磁盘 {mp}\t{up}% (已用 {ug}GB / 共 {tg}GB)")
+                lines.append(f"{self._t('report.dm_disk_usage')} {mp}\t{up}% ({self._t('report.dm_disk_used')} {ug}GB / {self._t('report.dm_disk_total')} {tg}GB)")
             self.context['system_info_text'] = '\n'.join(lines)
 
             # 报告说明
             notes = [
-                "1. 本报告基于达梦 DM8 数据库实时状态生成，反映了生成时刻的数据库健康状况",
-                "2. 报告中空白的项表示未能获取到相关数据，可能是由于权限限制或该功能未启用",
-                "3. 磁盘信息仅显示主要分区的使用率，如需查看完整磁盘信息请使用系统命令 'df -h'",
-                "4. 巡检结果仅供参考，实际运维中请结合具体业务场景进行分析",
-                "5. 建议定期进行数据库巡检，及时发现并解决潜在问题",
-                "6. AI 诊断功能（若启用）生成的建议仅供参考，不构成专业 DBA 意见"
+                self._t('report.dm_note_1'),
+                self._t('report.dm_note_2'),
+                self._t('report.dm_note_3'),
+                self._t('report.dm_note_4'),
+                self._t('report.dm_note_5'),
+                self._t('report.dm_note_6'),
             ]
             self.context['notes_text'] = '\n'.join(notes)
 
@@ -1136,12 +1147,12 @@ class saveDoc(object):
             health = self.context.get('health_analysis')
             if isinstance(health, dict):
                 score = health.get('score', 100)
-                status = health.get('status', '正常')
+                status = health.get('status', self._t('report.dm_health_status_ok'))
                 crit_n = health.get('critical_count', 0)
                 warn_n = health.get('warning_count', 0)
                 hs_lines = [
-                    f"综合评分\t{score}\t状态\t{status}",
-                    f"紧急告警数\t{crit_n}\t警告告警数\t{warn_n}"
+                    f"{self._t('report.dm_health_score')}\t{score}\t{self._t('report.dm_health_status')}\t{status}",
+                    f"{self._t('report.dm_critical_n')}\t{crit_n}\t{self._t('report.dm_warning_n')}\t{warn_n}"
                 ]
                 self.context['health_summary_text'] = '\n'.join(hs_lines)
             else:
@@ -1152,9 +1163,9 @@ class saveDoc(object):
             fail_count = len(errors) if errors else 0
             ok_count = len(list_keys) - fail_count
             es_stat_lines = [
-                f"总SQL数\t{ok_count + fail_count}\t-",
-                f"成功数\t{ok_count}\t-",
-                f"失败数\t{fail_count}\t-"
+                f"{self._t('report.dm_sql_total')}\t{ok_count + fail_count}\t-",
+                f"{self._t('report.dm_sql_ok')}\t{ok_count}\t-",
+                f"{self._t('report.dm_sql_fail')}\t{fail_count}\t-"
             ]
             self.context['error_stats_text'] = '\n'.join(es_stat_lines)
 
@@ -1247,28 +1258,30 @@ class saveDoc(object):
                     c.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
             return t
 
-        # 第10章 风险与建议
-        _add_heading(f"第10章 {self._t('report.ch20')}")
+        # 第14章 风险与建议
+        _add_heading(self._t('report.dm_ch14'))
         issues = self.context.get("auto_analyze", [])
         if issues:
-            _add_heading("10.1 问题明细", 2)
-            _add_table(["序号", "项目", "风险等级", "问题描述", "严重程度", "责任人", "修复建议"],
+            _add_heading(self._t('report.dm_ch14_1'), 2)
+            _add_table([self._t('report.dm_col_seq'), self._t('report.dm_col_item'), self._t('report.dm_col_risk_level'),
+                        self._t('report.dm_col_desc'), self._t('report.dm_col_severity'), self._t('report.dm_col_owner'),
+                        self._t('report.dm_col_fix')],
                        [(str(i+1), x.get('col1',''), x.get('col2',''), x.get('col3',''),
                          x.get('col4',''), x.get('col5',''), x.get('fix_sql','')[:200]) for i,x in enumerate(issues)])
             fix_sqls = [(x.get('col1',''), x.get('fix_sql','')) for x in issues if x.get('fix_sql')]
             if fix_sqls:
-                _add_heading("10.2 修复SQL速查", 2)
+                _add_heading(self._t('report.dm_ch14_2'), 2)
                 for fname, sql in fix_sqls:
                     p = doc.add_paragraph(); p.add_run(f"【{fname}】").bold = True
                     doc.add_paragraph(sql, style='List Bullet')
         else:
-            p = doc.add_paragraph("未发现明显风险项，数据库整体运行状况良好")
+            p = doc.add_paragraph(self._t('report.dm_no_risk_found'))
             for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
 
-        # 第11章 AI 诊断
+        # 第15章 AI 诊断
         ai_text = self.context.get('ai_advice', '')
         if ai_text:
-            _add_heading("第11章 AI 诊断建议")
+            _add_heading(self._t('report.dm_ch15'))
             for line in ai_text.split('\n'):
                 if line.startswith('# '): _add_heading(line[2:], level=2)
                 elif line.startswith('## '): _add_heading(line[3:], level=3)
@@ -1279,11 +1292,13 @@ class saveDoc(object):
                 elif line.strip():
                     doc.add_paragraph(line)
             next_chap = 12
+            notes_chapter = self._t('report.dm_notes_chapter_ai')
         else:
             next_chap = 11
+            notes_chapter = self._t('report.dm_fallback_notes_chapter')
 
         # 第{11|12}章 报告说明（段落形式）
-        _add_heading(f"第{next_chap}章 报告说明")
+        _add_heading(notes_chapter)
         for note in self.context.get('notes_text', '').split('\n'):
             if note.strip():
                 p = doc.add_paragraph(note.strip())
@@ -1311,7 +1326,7 @@ class saveDoc(object):
                 run.font.size = Pt(14) if level == 1 else Pt(12)
             return h
 
-        def _t(hdr, rows):
+        def _tbl(hdr, rows):
             if not rows: return
             max_cols = max(len(hdr), *(len(r) for r in rows))
             tt = doc.add_table(rows=max(1,len(rows))+1, cols=max_cols, style='Table Grid')
@@ -1324,7 +1339,9 @@ class saveDoc(object):
             for i, row in enumerate(rows):
                 for j, val in enumerate(row):
                     if j < max_cols:
-                        c = tt.cell(i+1, j); c.text = str(val)[:200] if val else ''
+                        # 替换换行符和多余空白为单个空格，避免单元格内换行
+                        text = ' '.join(str(val).split()) if val else ''
+                        c = tt.cell(i+1, j); c.text = text[:500] if text else ''
                         for p in c.paragraphs:
                             for run in p.runs:
                                 run.font.size = Pt(9); run.font.name = '微软雅黑'
@@ -1332,9 +1349,9 @@ class saveDoc(object):
 
         def _render(key, max_r=50, label=None):
             val = ctx.get(key, '')
-            if not val or (isinstance(val, str) and val == "无数据"):
+            if not val or (isinstance(val, str) and (val == "无数据" or val == self._t('report.dm_fallback_no_data'))):
                 desc = label if label else key
-                p = doc.add_paragraph(f"{desc}：暂无数据")
+                p = doc.add_paragraph(f"{desc}: {self._t('report.dm_fallback_no_data')}")
                 for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
                 return
             if isinstance(val, str) and '\t' in val:
@@ -1342,14 +1359,46 @@ class saveDoc(object):
                 if not lines: return
                 hdr = lines[0].split('\t')
                 rows = [ln.split('\t') for ln in lines[1:] if ln.strip()]
-                _t(hdr, rows[:max_r])
+                _tbl(hdr, rows[:max_r])
+            elif isinstance(val, list) and val:
+                # 处理列表格式数据（SQL查询结果）
+                # 检测是否为列表的列表（元组行）
+                if isinstance(val[0], (list, tuple)):
+                    # 多行数据：第一行作为表头
+                    if len(val[0]) > 1:
+                        hdr = [f"Column {i+1}" for i in range(len(val[0]))]
+                        rows = [[str(cell) if cell is not None else '' for cell in row] for row in val[:max_r]]
+                        _tbl(hdr, rows)
+                    else:
+                        # 单列数据：直接显示
+                        rows = [[str(row[0]) if row[0] else ''] for row in val[:max_r]]
+                        _tbl(["Value"], rows)
+                elif isinstance(val[0], dict):
+                    # 列表中的元素是字典（execute_query_safe返回的格式）
+                    keys = list(val[0].keys())
+                    hdr = [str(k) for k in keys]
+                    rows = []
+                    for row_dict in val[:max_r]:
+                        row = []
+                        for k in keys:
+                            v = row_dict.get(k)
+                            # SQL_TEXT字段：合并空格、去换行
+                            if isinstance(v, str) and k == 'SQL_TEXT':
+                                v = ' '.join(v.split())
+                            row.append(str(v) if v is not None else '')
+                        rows.append(row)
+                    _tbl(hdr, rows)
+                else:
+                    # 单行单列或单行多列
+                    p = doc.add_paragraph(str(val)[:500])
+                    for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
             else:
                 p = doc.add_paragraph(str(val)[:500])
                 for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
 
         try:
             doc = Document()
-            doc.add_paragraph("达梦数据库健康巡检报告",
+            doc.add_paragraph(self._t("report.dm_title"),
                               style=doc.styles.add_style('ReportTitle', 1))
             doc.styles['ReportTitle'].font.size = Pt(22)
             doc.styles['ReportTitle'].font.bold = True
@@ -1367,88 +1416,120 @@ class saveDoc(object):
                 return str(val) if val else 'N/A'
 
             info_items = [
-                ("数据库名称",   _v('co_name', 'DB_NAME')),
-                ("服务器地址",  _v('server_addr')),
-                ("达梦版本",    _v('dm_version', 'BANNER')),
-                ("服务器主机名", _v('hostname')),
-                ("实例启动时间", _v('uptime_text')),
-                ("巡检人员",    self.inspector_name),
-                ("服务器平台",  _v('platform_text')),
-                ("报告生成时间", _v('report_time')),
+                (self._t('report.dm_fallback_db_name'),   _v('co_name', 'DB_NAME')),
+                (self._t('report.dm_fallback_server_addr'),  _v('server_addr')),
+                (self._t('report.dm_fallback_version'),    _v('dm_version', 'BANNER')),
+                (self._t('report.dm_fallback_hostname'), _v('hostname')),
+                (self._t('report.dm_fallback_instance_time'), _v('uptime_text')),
+                (self._t('report.dm_fallback_inspector'),    self.inspector_name),
+                (self._t('report.dm_fallback_platform'),  _v('platform_text')),
+                (self._t('report.dm_fallback_report_time'), _v('report_time')),
             ]
             t_info = doc.add_table(rows=len(info_items), cols=2, style='Table Grid')
             for i, (k, v) in enumerate(info_items):
                 t_info.cell(i, 0).text = k; _set_cell_bg(t_info.cell(i, 0), 'F2F2F2')
-                t_info.cell(i, 1).text = str(v)
+                t_info.cell(i, 1).text = ' '.join(str(v).split())
                 for cell in [t_info.cell(i, 0), t_info.cell(i, 1)]:
                     for p in cell.paragraphs:
                         for run in p.runs:
                             run.font.size = Pt(10.5); run.font.name = '微软雅黑'
 
 # Ch1 基本信息
-            _add_heading("第1章 数据库基本信息")
+            _add_heading(self._t("report.dm_ch1"))
             _co = ctx.get('co_name', '')
             _dm = ctx.get('dm_version', '')
             if isinstance(_co, list) and _co: _co = _co[0].get('DB_NAME', '')
-            if isinstance(_dm, list) and _dm: _dm = _dm[0].get('BANNER', '')
-            _t(["项目", "值"], [
-                ["实例名称", str(_co)],
-                ["达梦版本", str(_dm)],
-            ])
+            elif not _co: _co = ''
+            if isinstance(_dm, list) and _dm: _dm = _dm[0].get('SVR_VERSION', '')
+            elif not _dm: _dm = ''
+            _tbl([self._t('report.tbl_col_key'), self._t('report.tbl_col_val')],
+                 [[self._t("report.dm_fallback_instance_name"), str(_co)],
+                  [self._t("report.dm_fallback_version"), str(_dm)]])
 
             # Ch2 巡检执行摘要
-            _add_heading("第2章 巡检执行摘要")
+            _add_heading(self._t("report.dm_ch2"))
             hst = ctx.get('health_summary_text', '')
             if hst:
+                _add_heading(self._t('report.dm_ch2_health'), level=2)
+                rows = []
                 for line in hst.split('\n'):
                     if line.strip():
                         parts = line.split('\t')
-                        _t(["项目", "数值"], [parts])
+                        # 每行可能有多个键值对，每2个为一组
+                        for i in range(0, len(parts), 2):
+                            if i+1 < len(parts):
+                                rows.append([parts[i], parts[i+1]])
+                if rows:
+                    _tbl([self._t('report.tbl_col_key'), self._t('report.tbl_col_val')], rows)
 
             est = ctx.get('error_stats_text', '')
             if est:
-                doc.add_paragraph("")
-                p3 = doc.add_paragraph(); r3 = p3.add_run("SQL 执行情况")
-                r3.bold = True; r3.font.size = Pt(12); r3.font.name = '微软雅黑'
+                _add_heading(self._t('report.dm_ch2_sql'), level=2)
                 el = [l.strip() for l in est.strip().split('\n') if l.strip()]
                 if el:
-                    _t(["项目", "数值"], [c.split('\t') for c in el])
+                    data_rows = [c.split('\t') for c in el]
+                    if data_rows:
+                        # 检查第3列是否全为'-'，如果是则只用前2列
+                        max_cols = max(len(r) for r in data_rows)
+                        if max_cols >= 3 and all(r[2] == '-' for r in data_rows if len(r) > 2):
+                            data_rows = [r[:2] for r in data_rows]
+                        _tbl([self._t('report.dm_fallback_sql_name'), self._t('report.dm_fallback_err_code')],
+                             data_rows)
                 edt = ctx.get('error_detail_text', '')
                 if edt and edt != '-':
                     doc.add_paragraph("")
                     dlines = [l.strip() for l in edt.strip().split('\n') if l.strip()]
                     if len(dlines) > 1:
-                        _t(["SQL名称", "错误码", "修复建议"], [l.split('\t') for l in dlines[1:] if l.count('\t') >= 2])
+                        _tbl([self._t("report.dm_fallback_sql_name"),
+                              self._t("report.dm_fallback_err_code"),
+                              self._t("report.dm_fallback_fix_suggest")],
+                             [l.split('\t') for l in dlines[1:] if l.count('\t') >= 2])
 
             # Ch3-10
-            _add_heading("第3章 表空间使用情况")
+            _add_heading(self._t("report.dm_ch3"))
             _render('dm_tablespace', 30)
 
-            _add_heading("第4章 会话与事务")
+            _add_heading(self._t("report.dm_ch4"))
             _render('dm_sessions'); _render('dm_transactions')
 
-            _add_heading("第5章 内存分析")
-            _render('dm_sga', label='SGA 缓冲池汇总')
-            _render('dm_memory', label='各缓冲池详情（SGA）')
+            _add_heading(self._t("report.dm_ch5"))
+            _render('dm_sga', label=self._t('report.dm_fallback_sga_summary'))
+            _render('dm_memory', label=self._t('report.dm_fallback_sga_detail'))
 
-            _add_heading("第6章 重做日志与归档")
+            _add_heading(self._t("report.dm_ch6"))
             _render('dm_redo_logs')
 
-            _add_heading("第7章 系统资源监控")
+            _add_heading(self._t("report.dm_ch7"))
             sit = ctx.get('system_info_text', '')
             if sit:
+                rows = []
                 for line in sit.split('\n'):
                     if line.strip():
                         parts = line.split('\t')
-                        _t(["项目", "详情"], [parts])
+                        # 每行可能有多个键值对，每2个为一组
+                        for i in range(0, len(parts), 2):
+                            if i+1 < len(parts):
+                                rows.append([parts[i], parts[i+1]])
+                if rows:
+                    _tbl([self._t('report.tbl_col_key'), self._t('report.tbl_col_val')], rows)
 
-            _add_heading("第8章 对象与用户安全")
-            _add_heading("8.1 无效对象", 2); _render('dm_invalid_cnt')
-            _add_heading("8.2 用户列表", 2); _render('dm_users', 20)
+            _add_heading(self._t("report.dm_ch8"))
+            _add_heading(self._t("report.dm_ch81"), 2); _render('dm_invalid_cnt')
+            _add_heading(self._t("report.dm_ch82"), 2); _render('dm_users', 20)
 
-            _add_heading("第9章 备份与归档"); _render('dm_backup')
+            _add_heading(self._t("report.dm_ch9")); _render('dm_backup')
 
-            # 第10章由 _append_chapters 统一生成（作为第13章），此处不再重复
+            # 第10章 长时间运行的SQL
+            _add_heading(self._t("report.dm_ch10")); _render('dm_long_sql', 30)
+
+            # 第11章 Top SQL
+            _add_heading(self._t("report.dm_ch11")); _render('dm_top_sql_cpu', 30)
+
+            # 第12章 Undo 信息
+            _add_heading(self._t("report.dm_ch12")); _render('dm_undo_info', 30)
+
+            # 第13章 等待事件统计
+            _add_heading(self._t("report.dm_ch13")); _render('dm_wait_class', 30)
 
             self._append_chapters(doc)
             doc.save(self.ofile)
@@ -1472,7 +1553,7 @@ def main():
     db_info['host'] = input(_t("dm8_host_prompt")).strip()
     db_info['port'] = input(_t("dm8_port_prompt")).strip() or "5236"
     db_info['user'] = input(_t("dm8_user_prompt")).strip() or "SYSDBA"
-    db_info['password'] = input(_t("dm8_password_prompt")).strip()
+    db_info['password'] = getpass.getpass(_t("dm8_password_prompt"))
     db_info['db_name'] = input(_t("dm8_dbname_prompt")).strip() or "DAMENG"
     inspector_name = input(_t("dm8_inspector_prompt")).strip() or "Jack"
 
@@ -1481,7 +1562,7 @@ def main():
         db_info['ssh_host'] = input(_t("dm8_ssh_host_prompt").format(host=db_info['host'])).strip() or db_info['host']
         db_info['ssh_port'] = int(input(_t("dm8_ssh_port_prompt")).strip() or "22")
         db_info['ssh_user'] = input(_t("dm8_ssh_user_prompt")).strip() or "root"
-        db_info['ssh_password'] = input(_t("dm8_ssh_password_prompt")).strip()
+        db_info['ssh_password'] = getpass.getpass(_t("dm8_ssh_password_prompt"))
     else:
         db_info['ssh_host'] = ''
         db_info['ssh_port'] = 22

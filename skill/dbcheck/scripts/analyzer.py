@@ -332,16 +332,16 @@ def smart_analyze_pg(context: dict) -> list:
         max_conn = _int(pg_conn[0].get('max_connections', 100))
         if usage_pct > 90:
             issues.append({
-                'col1': '连接数使用率', 'col2': '高风险',
+                'col1': 'report.pg_issue_conn_usage_high', 'col2': 'report.risk_high',
                 'col3': f'连接使用率 {usage_pct:.1f}%（{used}/{max_conn}），接近上限将拒绝新连接',
-                'col4': '高', 'col5': 'DBA',
+                'col4': 'report.pg_fallback_priority_high', 'col5': 'report.pg_fallback_owner_dba',
                 'fix_sql': f"-- 修改 postgresql.conf：\n-- max_connections = {min(max_conn * 2, 1000)}\n-- 建议同时使用 PgBouncer 连接池"
             })
         elif usage_pct > 80:
             issues.append({
-                'col1': '连接数使用率', 'col2': '中风险',
+                'col1': 'report.pg_issue_conn_usage_high', 'col2': 'report.risk_mid',
                 'col3': f'连接使用率 {usage_pct:.1f}%（{used}/{max_conn}），建议关注',
-                'col4': '中', 'col5': 'DBA',
+                'col4': 'report.pg_fallback_priority_mid', 'col5': 'report.pg_fallback_owner_dba',
                 'fix_sql': "SELECT pid, usename, application_name, state, query_start, query FROM pg_stat_activity WHERE state != 'idle' ORDER BY query_start;"
             })
 
@@ -351,9 +351,9 @@ def smart_analyze_pg(context: dict) -> list:
         hit_rate = _float(row.get('cache_hit_ratio', 100))
         if hit_rate < 95:
             issues.append({
-                'col1': '缓冲区缓存命中率低', 'col2': '高风险',
+                'col1': 'report.pg_issue_cache_hit_low', 'col2': 'report.risk_high',
                 'col3': f'缓存命中率仅 {hit_rate:.1f}%（建议 > 99%），大量数据从磁盘读取',
-                'col4': '高', 'col5': 'DBA',
+                'col4': 'report.pg_fallback_priority_high', 'col5': 'report.pg_fallback_owner_dba',
                 'fix_sql': "-- 增大 shared_buffers（建议物理内存的 25%）：\n-- shared_buffers = 4GB  # 修改 postgresql.conf 后重启"
             })
 
@@ -365,9 +365,9 @@ def smart_analyze_pg(context: dict) -> list:
         sb_gb = sb_pages * 8 / 1024 / 1024
         if 0 < sb_gb < 1:
             issues.append({
-                'col1': 'shared_buffers 偏小', 'col2': '中风险',
+                'col1': 'report.pg_issue_shared_buffers_small', 'col2': 'report.risk_mid',
                 'col3': f'shared_buffers = {sb} pages（约 {sb_gb:.2f} GB），建议设为物理内存的 25%',
-                'col4': '中', 'col5': 'DBA',
+                'col4': 'report.pg_fallback_priority_mid', 'col5': 'report.pg_fallback_owner_dba',
                 'fix_sql': "-- 修改 postgresql.conf：\n-- shared_buffers = 4GB\n-- 需要重启 PostgreSQL"
             })
 
@@ -390,9 +390,9 @@ def smart_analyze_pg(context: dict) -> list:
                 pass
     if long_queries:
         issues.append({
-            'col1': '长时间运行的查询', 'col2': '高风险',
+            'col1': 'report.pg_issue_long_query', 'col2': 'report.risk_high',
             'col3': f'发现 {len(long_queries)} 个执行超过 60 秒的查询，可能持有锁',
-            'col4': '高', 'col5': 'DBA',
+            'col4': 'report.pg_fallback_priority_high', 'col5': 'report.pg_fallback_owner_dba',
             'fix_sql': '\n'.join([f"SELECT pg_terminate_backend({p.get('pid', '')});  -- {str(p.get('query',''))[:60]}" for p in long_queries[:5]])
         })
 
@@ -400,9 +400,9 @@ def smart_analyze_pg(context: dict) -> list:
     for p in pg_proc:
         if str(p.get('wait_event_type', '')) == 'Lock':
             issues.append({
-                'col1': '存在锁等待', 'col2': '中风险',
+                'col1': 'report.pg_issue_lock_wait', 'col2': 'report.risk_mid',
                 'col3': '当前有进程在等待锁释放，可能影响业务响应速度',
-                'col4': '中', 'col5': 'DBA',
+                'col4': 'report.pg_fallback_priority_mid', 'col5': 'report.pg_fallback_owner_dba',
                 'fix_sql': "SELECT blocked_locks.pid AS blocked_pid, blocking_locks.pid AS blocking_pid,\n  blocked_activity.query AS blocked_query, blocking_activity.query AS blocking_query\nFROM pg_catalog.pg_locks blocked_locks\nJOIN pg_catalog.pg_stat_activity blocked_activity ON blocked_activity.pid = blocked_locks.pid\nJOIN pg_catalog.pg_locks blocking_locks ON blocking_locks.locktype = blocked_locks.locktype\n  AND blocking_locks.granted\nJOIN pg_catalog.pg_stat_activity blocking_activity ON blocking_activity.pid = blocking_locks.pid\nWHERE NOT blocked_locks.granted;"
             })
             break
@@ -412,9 +412,9 @@ def smart_analyze_pg(context: dict) -> list:
     superusers = [u for u in pg_users if str(u.get('superuser', '')).upper() in ('T', 'TRUE', 'YES', '1')]
     if len(superusers) > 2:
         issues.append({
-            'col1': '超级用户数量过多', 'col2': '中风险',
+            'col1': 'report.pg_issue_superuser_many', 'col2': 'report.risk_mid',
             'col3': f'发现 {len(superusers)} 个超级用户，建议最小化权限，超级用户仅用于管理',
-            'col4': '中', 'col5': 'DBA',
+            'col4': 'report.pg_fallback_priority_mid', 'col5': 'report.pg_fallback_owner_dba',
             'fix_sql': "-- 查看超级用户：\nSELECT usename, usesuper FROM pg_user WHERE usesuper;\n-- 撤销多余超级权限：\nALTER USER username NOSUPERUSER;"
         })
 
@@ -422,9 +422,9 @@ def smart_analyze_pg(context: dict) -> list:
     archive = _setting('archive_mode')
     if archive and str(archive).lower() == 'off':
         issues.append({
-            'col1': '归档模式未开启', 'col2': '建议',
+            'col1': 'report.pg_issue_archive_mode_off', 'col2': 'report.risk_suggest',
             'col3': 'archive_mode=off，无法实现 PITR（时间点恢复），生产环境建议开启',
-            'col4': '低', 'col5': 'DBA',
+            'col4': 'report.pg_fallback_priority_low', 'col5': 'report.pg_fallback_owner_dba',
             'fix_sql': "-- 修改 postgresql.conf：\n-- archive_mode = on\n-- archive_command = 'cp %p /path/to/archive/%f'\n-- wal_level = replica\n-- 需要重启 PostgreSQL"
         })
 
@@ -436,16 +436,16 @@ def smart_analyze_pg(context: dict) -> list:
             continue
         if usage > 90:
             issues.append({
-                'col1': f'磁盘空间紧张 ({mp})', 'col2': '高风险',
+                'col1': 'report.pg_issue_disk_usage_high', 'col2': 'report.risk_high',
                 'col3': f'磁盘 {mp} 使用率 {usage:.1f}%，可能导致数据库停止写入',
-                'col4': '高', 'col5': '系统管理员',
+                'col4': 'report.pg_fallback_priority_high', 'col5': 'report.pg_fallback_owner_sysadmin',
                 'fix_sql': "-- 查找大表：\nSELECT schemaname, tablename, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size\nFROM pg_tables ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC LIMIT 10;"
             })
         elif usage > 80:
             issues.append({
-                'col1': f'磁盘空间预警 ({mp})', 'col2': '中风险',
+                'col1': 'report.pg_issue_disk_warning', 'col2': 'report.risk_mid',
                 'col3': f'磁盘 {mp} 使用率 {usage:.1f}%',
-                'col4': '中', 'col5': '系统管理员',
+                'col4': 'report.pg_fallback_priority_mid', 'col5': 'report.pg_fallback_owner_sysadmin',
                 'fix_sql': ''
             })
 
@@ -453,9 +453,9 @@ def smart_analyze_pg(context: dict) -> list:
     mem_usage = _float(context.get('system_info', {}).get('memory', {}).get('usage_percent', 0))
     if mem_usage > 90:
         issues.append({
-            'col1': '系统内存使用率', 'col2': '高风险',
+            'col1': 'report.pg_issue_mem_usage_high', 'col2': 'report.risk_high',
             'col3': f'系统内存使用率 {mem_usage:.1f}%，可能触发 OOM Killer 杀掉 PG 进程',
-            'col4': '高', 'col5': '系统管理员',
+            'col4': 'report.pg_fallback_priority_high', 'col5': 'report.pg_fallback_owner_sysadmin',
             'fix_sql': ''
         })
 
@@ -466,9 +466,9 @@ def smart_analyze_pg(context: dict) -> list:
         if live > 0 and dead / live > 0.2 and dead > 10000:
             dbname = db.get('datname', '?')
             issues.append({
-                'col1': f'{dbname} 存在大量 dead tuples', 'col2': '中风险',
+                'col1': 'report.pg_issue_dead_tuples', 'col2': 'report.risk_mid',
                 'col3': f'数据库 {dbname} dead tuples 占比 {dead/(live+dead)*100:.1f}%，建议执行 VACUUM',
-                'col4': '中', 'col5': 'DBA',
+                'col4': 'report.pg_fallback_priority_mid', 'col5': 'report.pg_fallback_owner_dba',
                 'fix_sql': f"VACUUM ANALYZE {dbname};\n-- 或全库：\nVACUUM VERBOSE ANALYZE;"
             })
 
@@ -1142,6 +1142,27 @@ class AIAdvisor:
         'top_sql_top5': 'Top SQL 前5',
     }
 
+    METRIC_LABELS_EN = {
+        'mem_usage': 'Memory Usage',
+        'cpu_usage': 'CPU Usage',
+        'disk_usage_max': 'Max Disk Usage',
+        'connections': 'Current Connections',
+        'max_connections': 'Max Connections Config',
+        'max_used_connections': 'Peak Connections Used',
+        'cache_hit_ratio': 'Buffer Cache Hit Ratio',
+        'queries_total': 'Total Queries',
+        'risk_count': 'Risk Count',
+        'health_status': 'Health Status',
+        # ── Oracle-specific metrics ────────────────────────────────
+        'db_version': 'DB Version',
+        'hostname': 'Hostname',
+        'uptime': 'Uptime',
+        'tablespace_count': 'Tablespace Count',
+        'wait_events_top5': 'Top 5 Wait Events',
+        'blocked_sessions': 'Blocked Sessions',
+        'top_sql_top5': 'Top 5 SQL by Buffer Gets',
+    }
+
     def __init__(self, backend: str = None, api_key: str = None,
                  api_url: str = None, model: str = None):
         # ── 安全限制 1: 只允许 ollama 或 disabled ──
@@ -1171,13 +1192,17 @@ class AIAdvisor:
     def enabled(self) -> bool:
         return self.backend != 'disabled'
 
-    def _build_prompt(self, db_type: str, label: str, metrics: dict, issues: list) -> str:
-        """构建发给 LLM 的诊断 Prompt"""
+    def _build_prompt(self, db_type: str, label: str, metrics: dict, issues: list,
+                      lang: str = 'zh') -> str:
+        """构建发给 LLM 的诊断 Prompt，支持中英文"""
+        labels = self.METRIC_LABELS_ZH if lang == 'zh' else self.METRIC_LABELS_EN
+        sep = '=' * 60
+
         metric_lines = []
         for k, v in metrics.items():
-            zh = self.METRIC_LABELS_ZH.get(k, k)
+            lbl = labels.get(k, k)
             if v is not None:
-                metric_lines.append(f"  - {zh}: {v}")
+                metric_lines.append(f"  - {lbl}: {v}")
 
         issue_lines = []
         for i, iss in enumerate(issues[:10], 1):
@@ -1185,29 +1210,38 @@ class AIAdvisor:
 
         # Oracle 专属详细信息节（由 main_oracle_full.py 预构建）
         oracle_extra = ""
-        if 'wait_events_top5' in metrics and metrics['wait_events_top5'] not in ('N/A', None, ''):
-            oracle_extra += f"\n【等待事件 Top5】\n{metrics['wait_events_top5']}"
-        if 'blocked_sessions' in metrics and metrics['blocked_sessions'] not in ('N/A', None, ''):
-            oracle_extra += f"\n【阻塞会话】\n  {metrics['blocked_sessions']}"
-        if 'top_sql_top5' in metrics and metrics['top_sql_top5'] not in ('N/A', None, ''):
-            oracle_extra += f"\n【Top SQL（Buffer Gets 前5）】\n{metrics['top_sql_top5']}"
+        if lang == 'zh':
+            if 'wait_events_top5' in metrics and metrics['wait_events_top5'] not in ('N/A', None, ''):
+                oracle_extra += f"\n【等待事件 Top5】\n{metrics['wait_events_top5']}"
+            if 'blocked_sessions' in metrics and metrics['blocked_sessions'] not in ('N/A', None, ''):
+                oracle_extra += f"\n【阻塞会话】\n  {metrics['blocked_sessions']}"
+            if 'top_sql_top5' in metrics and metrics['top_sql_top5'] not in ('N/A', None, ''):
+                oracle_extra += f"\n【Top SQL（Buffer Gets 前5）】\n{metrics['top_sql_top5']}"
+        else:
+            if 'wait_events_top5' in metrics and metrics['wait_events_top5'] not in ('N/A', None, ''):
+                oracle_extra += f"\n[Top 5 Wait Events]\n{metrics['wait_events_top5']}"
+            if 'blocked_sessions' in metrics and metrics['blocked_sessions'] not in ('N/A', None, ''):
+                oracle_extra += f"\n[Blocked Sessions]\n  {metrics['blocked_sessions']}"
+            if 'top_sql_top5' in metrics and metrics['top_sql_top5'] not in ('N/A', None, ''):
+                oracle_extra += f"\n[Top SQL by Buffer Gets]\n{metrics['top_sql_top5']}"
 
-        prompt = f"""你是一位拥有20年经验的 Oracle 数据库资深DBA，以下是对 {db_type.upper()} 数据库「{label}」的全面巡检结果，请进行深度诊断。
+        if lang == 'zh':
+            prompt = f"""你是一位拥有20年经验的 Oracle 数据库资深DBA，以下是对 {db_type.upper()} 数据库「{label}」的全面巡检结果，请进行深度诊断。
 
-{'='*60}
+{sep}
 【一、关键健康指标】
-{'='*60}
+{sep}
 {chr(10).join(metric_lines) or '  (无)'}
 
-{'='*60}
+{sep}
 【二、发现的风险项】
-{'='*60}
+{sep}
 {chr(10).join(issue_lines) or '  未发现明显风险项'}
 
 {oracle_extra if oracle_extra else ''}
-{'='*60}
+{sep}
 【三、诊断要求】
-{'='*60}
+{sep}
 请基于以上巡检数据，给出 4~6 条专业优化建议，要求：
 1. 优先分析【等待事件 Top5】：识别主要等待类型（如 db file sequential read、log file sync、buffer busy waits 等），给出具体优化方向
 2. 如存在【阻塞会话】：分析阻塞原因（锁竞争、热块更新等）并给出解决思路
@@ -1230,10 +1264,49 @@ class AIAdvisor:
 ## 整体评价
 
 [一句话整体评价]"""
+        else:
+            prompt = f"""You are a senior DBA with 20 years of experience. Below is the comprehensive inspection report for the {db_type.upper()} database "{label}". Please provide an in-depth diagnosis.
+
+{sep}
+[I. Key Health Metrics]
+{sep}
+{chr(10).join(metric_lines) or '  (none)'}
+
+{sep}
+[II. Detected Risk Items]
+{sep}
+{chr(10).join(issue_lines) or '  No significant risks found.'}
+
+{oracle_extra if oracle_extra else ''}
+{sep}
+[III. Diagnosis Requirements]
+{sep}
+Based on the inspection data above, provide 4~6 professional optimization recommendations:
+1. Prioritize analysis of [Top 5 Wait Events]: identify major wait types (e.g., db file sequential read, log file sync, buffer busy waits) and provide specific optimization directions.
+2. If [Blocked Sessions] exist: analyze the cause (lock contention, hot block updates, etc.) and propose solutions.
+3. For [Top SQL]: evaluate whether there are full table scans, high disk reads, etc., and provide optimization recommendations.
+4. Combine [Key Metrics] and [Risk Items] for an overall health assessment.
+5. Each recommendation must include: Problem Identification → Cause Analysis → Specific Fix (or parameter tuning reference).
+6. Provide an overall health rating (Excellent/Good/Fair/Critical) and main concerns.
+
+Format requirement (output Markdown directly, no prefixes like "Here are"):
+## Key Concerns
+
+[In-depth analysis of Top SQL and wait events]
+
+## Optimization Recommendations
+
+1. [Recommendation 1]
+2. [Recommendation 2]
+...
+
+## Overall Assessment
+
+[One-sentence overall assessment]"""
         return prompt
 
     def diagnose(self, db_type: str, label: str, context: dict, issues: list,
-                 timeout: int = 30) -> str:
+                 timeout: int = 30, lang: str = 'zh') -> str:
         """
         调用 AI 后端进行诊断分析。
 
@@ -1243,30 +1316,27 @@ class AIAdvisor:
                         Oracle: 预构建的 metrics dict（含 wait_events_top5/top_sql_top5 等）
         :param issues: smart_analyze_* 返回的风险列表
         :param timeout: 请求超时秒数
+        :param lang: 'zh' 或 'en'，决定 AI 提示词语言
         :return: AI 生成的建议文本，失败时返回空字符串
         """
         if not self.enabled:
             return ''
 
         # ── 判断传入的是预构建 metrics（Oracle）还是原始 context（MySQL/PG）──
-        # Oracle 全面巡检在 main_oracle_full.py 中预构建了 metrics dict，
-        # 其中包含 wait_events_top5 / top_sql_top5 / blocked_sessions 等专属字段；
-        # 而 MySQL/PG 传入的是 getData.checkdb() 返回的原始 context。
         _is_oracle_metrics = 'wait_events_top5' in context or 'top_sql_top5' in context
 
         if _is_oracle_metrics:
-            # Oracle 路径：直接使用预构建的 metrics（已包含所有关键字段）
             metrics = context
         else:
-            # MySQL / PG 路径：从原始 context 中提取指标
             sys_info = context.get('system_info', {})
+            hs_default = 'Unknown' if lang == 'en' else '未知'
             metrics = {
                 'mem_usage': sys_info.get('memory', {}).get('usage_percent', 0),
                 'cpu_usage': sys_info.get('cpu', {}).get('usage_percent', 0) if isinstance(sys_info.get('cpu'), dict) else 0,
                 'disk_usage_max': max((d.get('usage_percent', 0) for d in sys_info.get('disk_list', [])
                                        if d.get('mountpoint', '/') not in IGNORE_MOUNTS), default=0),
                 'risk_count': len(issues),
-                'health_status': context.get('health_status', '未知'),
+                'health_status': context.get('health_status', hs_default),
             }
             if db_type == 'mysql':
                 metrics['connections'] = context.get('threads_connected', [{}])[0].get('Value', 0) if context.get('threads_connected') else 0
@@ -1278,7 +1348,7 @@ class AIAdvisor:
                     metrics['max_connections'] = pg_conn[0].get('max_connections', 0)
                     metrics['cache_hit_ratio'] = context.get('pg_cache_hit', [{}])[0].get('cache_hit_ratio', 0) if context.get('pg_cache_hit') else 0
 
-        prompt = self._build_prompt(db_type, label, metrics, issues)
+        prompt = self._build_prompt(db_type, label, metrics, issues, lang)
 
         try:
             if self.backend == 'ollama':
