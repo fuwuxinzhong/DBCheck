@@ -1400,4 +1400,11 @@ EN = {
     "dm8_progress_health": "Smart Health Evaluation",
     "dm8_progress_ai": "AI Diagnosis",
     "dm8_progress_done": "Complete [OK]",
+
+    # Web UI
+    "webui.log_generating_report": "Generating Word report...",
+    "webui.err_template_create": "Failed to create report template",
+    "webui.err_report_generate": "Failed to generate report file",
+    "webui.log_report_ok": "Report generated: {fname}",
+    "webui.mysql_report_filename": "MySQLInspection_{name}_{ts}",
 }

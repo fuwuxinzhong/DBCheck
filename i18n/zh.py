@@ -1409,4 +1409,11 @@ ZI = {
     "dm8_progress_health": "智能健康评估",
     "dm8_progress_ai": "AI诊断",
     "dm8_progress_done": "完成 [OK]",
+
+    # Web UI 专用
+    "webui.log_generating_report": "正在生成 Word 报告...",
+    "webui.err_template_create": "生成报告模板失败",
+    "webui.err_report_generate": "生成报告文件失败",
+    "webui.log_report_ok": "报告已生成: {fname}",
+    "webui.mysql_report_filename": "MySQL巡检报告_{name}_{ts}",
 }

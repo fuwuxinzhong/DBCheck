@@ -141,7 +141,7 @@ class RemoteSystemInfoCollector:
                                         username=self.username, password=self.password, timeout=10)
             return True
         except Exception as e:
-            print(f"SSH连接失败 {self.host}:{self.port}: {e}")
+            print("SSH连接失败 %s:%s: %s" % (self.host, self.port, str(e)))
             return False
 
     def disconnect(self):
@@ -162,7 +162,7 @@ class RemoteSystemInfoCollector:
             error = stderr.read().decode('utf-8').strip()
             return output, error
         except Exception as e:
-            print(f"执行命令失败: {command}, 错误: {e}")
+            print("执行命令失败: %s, 错误: %s" % (command, str(e)))
             return "", str(e)
 
     def get_cpu_info(self):
@@ -200,7 +200,7 @@ class RemoteSystemInfoCollector:
                 'max_frequency': round(max_frequency, 2)
             }
         except Exception as e:
-            print(f"获取CPU信息失败: {e}")
+            print("获取CPU信息失败: %s" % str(e))
             return {}
 
     def get_memory_info(self):
@@ -241,7 +241,7 @@ class RemoteSystemInfoCollector:
                 return memory_info
             return {}
         except Exception as e:
-            print(f"获取内存信息失败: {e}")
+            print("获取内存信息失败: %s" % str(e))
             return {}
 
     def get_disk_info(self):
@@ -293,7 +293,7 @@ class RemoteSystemInfoCollector:
                         })
             return disk_data
         except Exception as e:
-            print(f"获取磁盘信息失败: {e}")
+            print("获取磁盘信息失败: %r" % e)
             return []
 
     def get_system_info(self):
@@ -353,7 +353,7 @@ class LocalSystemInfoCollector:
                 'max_frequency': round(cpu_freq.max, 2) if cpu_freq else 'N/A'
             }
         except Exception as e:
-            print(f"获取CPU信息失败: {e}")
+            print("获取CPU信息失败: %s" % str(e))
             return {}
 
     def get_memory_info(self):
@@ -375,7 +375,7 @@ class LocalSystemInfoCollector:
                 'swap_usage_percent': swap.percent
             }
         except Exception as e:
-            print(f"获取内存信息失败: {e}")
+            print("获取内存信息失败: %s" % str(e))
             return {}
 
     def get_disk_info(self):
@@ -420,7 +420,7 @@ class LocalSystemInfoCollector:
                         pass
             return disk_info
         except Exception as e:
-            print(f"获取磁盘信息失败: {e}")
+            print("获取磁盘信息失败: %r" % e)
             return {}
 
     def get_system_info(self):
@@ -725,7 +725,7 @@ class WordTemplateGenerator:
         title_run.font.bold = True
         self.doc.add_paragraph()
         table = self.doc.add_table(rows=8, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -771,7 +771,7 @@ class WordTemplateGenerator:
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -808,7 +808,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         # CPU table: 4 cols, auto-fit to window
         table = self.doc.add_table(rows=2, cols=4)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = True  # 根据窗口自动调整
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = self._l['hdr_cpu_usage']
@@ -834,7 +834,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         # Memory table: 4 cols, auto-fit to window
         table = self.doc.add_table(rows=2, cols=4)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = True  # 根据窗口自动调整
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = self._l['hdr_total_mem']
@@ -859,7 +859,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         # Disk table: 2 cols, auto-fit to window
         table = self.doc.add_table(rows=1, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = True  # 根据窗口自动调整
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         hdr_cells = table.rows[0].cells
@@ -899,7 +899,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=5, cols=3)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(4)
@@ -931,7 +931,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=6, cols=3)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(4)
@@ -964,7 +964,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=5, cols=3)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(4)
@@ -1009,7 +1009,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=4, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -1037,7 +1037,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(4)
@@ -1068,7 +1068,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(3)
         table.columns[1].width = Cm(2)
@@ -1111,7 +1111,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=3)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(4)
@@ -1158,7 +1158,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(3)
         table.columns[1].width = Cm(2)
@@ -1196,7 +1196,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(1.5)
         table.columns[1].width = Cm(2)
@@ -1234,7 +1234,7 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.size = Pt(12)
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=3)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(3)
@@ -1276,7 +1276,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(3)
         table.columns[1].width = Cm(2)
@@ -2167,6 +2167,15 @@ class saveDoc(object):
         except Exception:
             return key
 
+    def _set_cell_bg(self, cell, hex_color):
+        from docx.oxml.ns import nsdecls
+        from docx.oxml import parse_xml
+        try:
+            shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
+            cell._tc.get_or_add_tcPr().append(shading)
+        except Exception:
+            pass
+
     def contextsave(self):
         """
         将巡检数据渲染并保存为 Word 报告文件。
@@ -2392,13 +2401,16 @@ class saveDoc(object):
                 if auto_analyze:
                     doc2.add_heading('7.1 ' + self._t('report.risk_detail_chapter'), level=2)
                     tbl = doc2.add_table(rows=1+len(auto_analyze), cols=7)
-                    tbl.style = 'Light Grid Accent 1'
+                    tbl.style = 'Table Grid'
                     tbl.autofit = True  # 根据窗口自动调整表格宽度
                     hdrs = [self._t('report.col_seq'), self._t('report.col_risk_item'), self._t('report.col_level'), self._t('report.col_desc'), self._t('report.col_priority'), self._t('report.col_owner'), self._t('report.col_fix')]
                     for j,(cell,ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
                         cell.text = ht
+                        self._set_cell_bg(cell, '336699')
                         cell.paragraphs[0].runs[0].bold = True
                         cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                     for idx,item in enumerate(auto_analyze,1):
                         row = tbl.rows[idx].cells
                         row[0].text = str(idx)
@@ -2579,7 +2591,7 @@ class saveDoc(object):
             title_run.font.bold = True
             doc.add_paragraph()
             table = doc.add_table(rows=8, cols=2)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             table.columns[0].width = Cm(4)
             table.columns[1].width = Cm(10)
             data_map = [
@@ -2603,7 +2615,7 @@ class saveDoc(object):
             doc.add_page_break()
             doc.add_heading('1. ' + self._t('report.fallback_health_overview'), level=1)
             table = doc.add_table(rows=2, cols=2)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             table.columns[0].width = Cm(4)
             table.columns[1].width = Cm(10)
             cells = table.rows[0].cells
@@ -2621,7 +2633,7 @@ class saveDoc(object):
             mem = self.context.get('system_info', {}).get('memory', {})
             doc.add_heading('2.1 ' + self._t('report.fallback_cpu_info'), level=2)
             table = doc.add_table(rows=2, cols=4)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
             hdr[0].text = self._t('report.fallback_cpu_usage')
             hdr[1].text = self._t('report.fallback_physical_cores')
@@ -2636,7 +2648,7 @@ class saveDoc(object):
             doc.add_paragraph()
             doc.add_heading('2.2 ' + self._t('report.fallback_memory_info'), level=2)
             table = doc.add_table(rows=2, cols=4)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
             hdr[0].text = self._t('report.fallback_total_gb')
             hdr[1].text = self._t('report.fallback_used_gb')
@@ -2651,7 +2663,7 @@ class saveDoc(object):
             doc.add_heading('2.3 ' + self._t('report.fallback_disk_info'), level=2)
             disk_list = self.context.get('system_info', {}).get('disk_list', [])
             table = doc.add_table(rows=1+len(disk_list), cols=2)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             table.columns[0].width = Cm(8)
             table.columns[1].width = Cm(4)
             hdr = table.rows[0].cells
@@ -2723,7 +2735,7 @@ class saveDoc(object):
             doc.add_heading('5.1 ' + self._t('report.fallback_pg_db_list'), level=2)
             pg_db2 = self.context.get('pg_databases', [])
             table = doc.add_table(rows=1+min(len(pg_db2), 10), cols=3)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
             hdr[0].text = self._t('report.fallback_pg_dbname')
             hdr[1].text = self._t('report.fallback_pg_encoding')
@@ -2740,7 +2752,7 @@ class saveDoc(object):
             doc.add_heading('5.2 ' + self._t('report.fallback_pg_proc_list'), level=2)
             proc = self.context.get('pg_processlist', [])
             table = doc.add_table(rows=1+min(len(proc), 15), cols=5)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
             hdr[0].text = self._t('report.fallback_pg_pid')
             hdr[1].text = self._t('report.fallback_pg_pg_user')
@@ -2763,7 +2775,7 @@ class saveDoc(object):
             doc.add_heading('6.1 ' + self._t('report.fallback_pg_db_users'), level=2)
             users = self.context.get('pg_users', [])
             table = doc.add_table(rows=1+min(len(users), 15), cols=5)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
             hdr[0].text = self._t('report.fallback_pg_username')
             hdr[1].text = self._t('report.fallback_pg_superuser')
@@ -2806,7 +2818,7 @@ class saveDoc(object):
             if auto_analyze:
                 doc.add_heading('7.1 ' + self._t('report.fallback_pg_issue_detail'), level=2)
                 tbl = doc.add_table(rows=1 + len(auto_analyze), cols=7)
-                tbl.style = 'Light Grid Accent 1'
+                tbl.style = 'Table Grid'
                 tbl.autofit = True  # 根据窗口自动调整表格宽度
                 hdr = tbl.rows[0].cells
                 headers = [
@@ -2820,8 +2832,11 @@ class saveDoc(object):
                 ]
                 for j, (cell, hdr_text) in enumerate(zip(hdr, headers)):
                     cell.text = hdr_text
+                    self._set_cell_bg(cell, '336699')
                     cell.paragraphs[0].runs[0].bold = True
                     cell.paragraphs[0].runs[0].font.size = Pt(9)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for idx, item in enumerate(auto_analyze, 1):
                     row = tbl.rows[idx].cells
                     row[0].text = str(idx)
@@ -2957,7 +2972,7 @@ class saveDoc(object):
         创建「配置项 / 当前值」二列表格，直接使用传入的值填充。
         """
         table = doc.add_table(rows=1+len(items), cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.columns[0].width = Cm(col1_width)
         table.columns[1].width = Cm(col2_width)
         hdr = table.rows[0].cells
@@ -2991,7 +3006,7 @@ class saveDoc(object):
                     return item.get('setting', 'N/A')
             return 'N/A'
         table = doc.add_table(rows=1+len(items), cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.columns[0].width = Cm(col1_width)
         table.columns[1].width = Cm(col2_width)
         hdr = table.rows[0].cells

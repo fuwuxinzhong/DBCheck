@@ -1741,7 +1741,7 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
         (_t('report.cover_hostname'), hostname), (_t('report.cover_version'), ver), (_t('report.cover_start_time'), uptime),
         (_t('report.cover_cpu'), cpu), (_t('report.cover_mem'), mem),
     ]
-    tbl = _docx_table(doc, [_t('report.tbl_col_key'), _t('report.tbl_col_val')], summary_data, '0066CC')
+    tbl = _docx_table(doc, [_t('report.tbl_col_key'), _t('report.tbl_col_val')], summary_data, '336699')
     tbl.columns[0].width = Cm(4)
     tbl.columns[1].width = Cm(10)
 
@@ -1850,18 +1850,12 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
                         run.font.color.rgb = RGBColor(0, 102, 204)
                         run.font.size = Pt(12)
 
-                elif h_count == 3:        # ### 三级标题（加粗缩进正文）
+                elif h_count == 3:        # ### 三级标题（24.1.1）
                     h3_counter += 1
-                    p = doc.add_paragraph()
-                    p.paragraph_format.left_indent = Cm(0.3)
-                    p.paragraph_format.space_before = Pt(4)
-                    p.paragraph_format.space_after = Pt(2)
-                    r = p.add_run(f"▌ {title_text}")
-                    r.bold = True
-                    r.italic = True
-                    r.font.size = Pt(10.5)
-                    r.font.color.rgb = RGBColor(0, 102, 204)
-                    prev_was_content = True
+                    h = doc.add_heading(f"24.{h2_counter}.{h3_counter} {title_text}", level=3)
+                    for run in h.runs:
+                        run.font.color.rgb = RGBColor(0, 102, 204)
+                        run.font.size = Pt(11)
 
                 prev_was_content = False   # 标题不计入内容行
                 continue

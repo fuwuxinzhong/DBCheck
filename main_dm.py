@@ -1243,11 +1243,12 @@ class saveDoc(object):
             t = doc.add_table(rows=max(1,len(rows))+1, cols=len(headers), style='Table Grid')
             for j, h in enumerate(headers):
                 cell = t.cell(0, j); cell.text = h
-                _set_cell_bg(cell, 'DCE6F1')
+                _set_cell_bg(cell, '336699')
                 for p in cell.paragraphs:
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     for run in p.runs:
                         run.font.size = Pt(9); run.font.name = '微软雅黑'; run.bold = True
+                        run.font.color.rgb = RGBColor(255, 255, 255)
             for i, row_data in enumerate(rows):
                 for j, val in enumerate(row_data):
                     c = t.cell(i+1, j)
@@ -1331,11 +1332,12 @@ class saveDoc(object):
             max_cols = max(len(hdr), *(len(r) for r in rows))
             tt = doc.add_table(rows=max(1,len(rows))+1, cols=max_cols, style='Table Grid')
             for j, h in enumerate(hdr):
-                c = tt.cell(0, j); c.text = h; _set_cell_bg(c, 'DCE6F1')
+                c = tt.cell(0, j); c.text = h; _set_cell_bg(c, '336699')
                 for p in c.paragraphs:
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     for run in p.runs:
                         run.font.size = Pt(9); run.font.name = '微软雅黑'; run.bold = True
+                        run.font.color.rgb = RGBColor(255, 255, 255)
             for i, row in enumerate(rows):
                 for j, val in enumerate(row):
                     if j < max_cols:

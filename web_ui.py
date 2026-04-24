@@ -101,11 +101,57 @@ def run_mysql_task(task_id, db_info, inspector_name):
         data = mod.getData(db_info['ip'], db_info['port'], db_info['user'], db_info['password'], ssh_info)
         if data is None or data.conn_db2 is None:
             raise RuntimeError(_t('webui.err_getdata_none'))
-        ret = data.checkdb('builtin')
+
+        # ── stdout 重定向：捕获 checkdb() 内部的 AI 诊断等 print 输出 ───
+        import builtins as _bi
+        _orig_mysql_print = _bi.print
+        def _web_mysql_print(*_a, **_kw):
+            _sep = _kw.get('sep', ' ')
+            _msg = _sep.join(str(x) for x in _a)
+            _msg_clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', _msg)
+            if _msg_clean.strip():
+                _emit('log', {'msg': _msg_clean})
+            _orig_mysql_print(*_a, **_kw)
+        _bi.print = _web_mysql_print
+        try:
+            ret = data.checkdb('builtin')
+        finally:
+            _bi.print = _orig_mysql_print
+
         if not ret:
             raise RuntimeError(_t('webui.err_checkdb_false'))
+
+
+
+        # ── 生成 Word 报告 ───────────────────────────────────
+        _emit('log', {'msg': _t('webui.log_generating_report').format(ts=_ts())})
+        label_name = db_info.get('name', db_info.get('ip', 'unknown'))
+        ret.update({"co_name": [{'CO_NAME': label_name}]})
+        ret.update({"port": [{'PORT': db_info['port']}]})
+        ret.update({"ip": [{'IP': db_info['ip']}]})
+
+        inspector_name = db_info.get('inspector_name') or 'Jack'
+        ifile = mod.create_word_template(inspector_name)
+        if not ifile:
+            raise RuntimeError(_t('webui.err_template_create'))
+
+        reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+        if not os.path.exists(reports_dir):
+            os.makedirs(reports_dir)
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        ext_name = _t('webui.mysql_report_filename').format(name=label_name, ts=timestamp)
+        file_name = ext_name + '.docx'
+        ofile = os.path.join(reports_dir, file_name)
+
+        savedoc = mod.saveDoc(context=ret, ofile=ofile, ifile=ifile, inspector_name=inspector_name)
+        if not savedoc.contextsave():
+            raise RuntimeError(_t('webui.err_report_generate'))
+        _emit('log', {'msg': _t('webui.log_report_ok').format(fname=file_name)})
+
         if task:
             task['status'] = 'done'
+            task['report_file'] = ofile
+            task['report_name'] = file_name
         _emit('done', {'msg': _t('webui.log_inspection_done').format(ver=ver), 'task_id': task_id})
     except Exception as e:
         _emit('error', {'msg': _t('webui.err_inspection').format(task='MySQL', e=e)})
@@ -144,7 +190,23 @@ def run_pg_task(task_id, db_info, inspector_name):
                            database=db_info.get('database', 'postgres'), ssh_info=ssh_info)
         if data is None or data.conn_db2 is None:
             raise RuntimeError(_t('webui.err_getdata_none'))
-        ret = data.checkdb('builtin')
+
+        # ── stdout 重定向：捕获 checkdb() 内部的 AI 诊断等 print 输出 ───
+        import builtins as _bi
+        _orig_pg_print = _bi.print
+        def _web_pg_print(*_a, **_kw):
+            _sep = _kw.get('sep', ' ')
+            _msg = _sep.join(str(x) for x in _a)
+            _msg_clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', _msg)
+            if _msg_clean.strip():
+                _emit('log', {'msg': _msg_clean})
+            _orig_pg_print(*_a, **_kw)
+        _bi.print = _web_pg_print
+        try:
+            ret = data.checkdb('builtin')
+        finally:
+            _bi.print = _orig_pg_print
+
         if not ret:
             raise RuntimeError(_t('webui.err_checkdb_false'))
         if task:
@@ -245,7 +307,6 @@ def run_oracle_full_task(task_id, db_info, inspector_name):
 
 
 def run_dm_task(task_id, db_info, inspector_name):
-    print(f"[DEBUG] db_info: {db_info}")
     emit = socketio.emit
     task = tasks.get(task_id)
     def _emit(event, data):
@@ -279,7 +340,22 @@ def run_dm_task(task_id, db_info, inspector_name):
         if data is None or data.conn_db is None:
             raise RuntimeError(_t('webui.err_getdata_none'))
         _emit('log', {'msg': _t('webui.log_dm_analyzing').format(ts=_ts())})
-        context = data.checkdb('builtin')
+        # ── stdout 重定向：捕获 checkdb() 内部的 AI 诊断等 print 输出 ───
+        import builtins as _bi
+        _orig_dm_print = _bi.print
+        def _web_dm_print(*_a, **_kw):
+            _sep = _kw.get('sep', ' ')
+            _msg = _sep.join(str(x) for x in _a)
+            _msg_clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', _msg)
+            if _msg_clean.strip():
+                _emit('log', {'msg': _msg_clean})
+            _orig_dm_print(*_a, **_kw)
+        _bi.print = _web_dm_print
+        try:
+            context = data.checkdb('builtin')
+        finally:
+            _bi.print = _orig_dm_print
+
         if not context:
             raise RuntimeError(_t('webui.err_checkdb_empty'))
 

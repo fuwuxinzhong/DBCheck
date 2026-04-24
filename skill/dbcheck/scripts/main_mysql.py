@@ -62,6 +62,141 @@ def _t(key):
     except Exception:
         return key
 
+# ── Markdown → Word 渲染器 ─────────────────────────────────────────────────
+import re
+
+def _render_markdown_to_doc(doc, text, default_size=11, ch8_prefix=False):
+    """
+    将 Markdown 文本渲染为 Word 段落，支持：
+    - **加粗**、*斜体*、`行内代码`
+    - ## 二级标题（ch8_prefix=True 时自动加 8.X 序号）→ Heading 2
+    - ### 三级标题 → Heading 3（无序号）
+    - - /*/• 列表项 → bullet paragraph
+    - > 引用块 → indented paragraph
+    - [text](url) → text（去掉链接）
+    """
+    CODE_FONT = 'Courier New'
+    lines = text.strip().split('\n')
+    in_code_block = False
+    code_buf = []
+    _h2_seq = 0  # 用于 ## 标题的 8.X 序号
+
+    def _add_run(para, md_text, size):
+        """解析 md_text 中的 **bold**、*italic*、`code` 并添加 Run"""
+        # 先处理行内代码（优先级最高）
+        parts = re.split(r'(``[^`]+``|`[^`]+`)', md_text)
+        for part in parts:
+            if re.match(r'`[^`]+`', part):
+                run = para.add_run(part.strip('`'))
+                run.font.name = CODE_FONT
+                run.font.size = Pt(size - 1)
+                run.font.color.rgb = None
+            else:
+                sub_parts = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*)', part)
+                for sp in sub_parts:
+                    if sp.startswith('**') and sp.endswith('**'):
+                        run = para.add_run(sp[2:-2])
+                        run.bold = True
+                        run.font.size = Pt(size)
+                    elif sp.startswith('*') and sp.endswith('*'):
+                        run = para.add_run(sp[1:-1])
+                        run.italic = True
+                        run.font.size = Pt(size)
+                    elif sp:
+                        # 处理 [text](url) 链接
+                        link_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', sp)
+                        run = para.add_run(link_text)
+                        run.font.size = Pt(size)
+
+    for raw_line in lines:
+        line = raw_line.strip()
+
+        # 代码块开始/结束
+        if line.startswith('```'):
+            if not in_code_block:
+                in_code_block = True
+                code_buf = []
+                continue
+            else:
+                in_code_block = False
+                code_p = doc.add_paragraph()
+                code_p.style = 'Quote'
+                code_p.paragraph_format.left_indent = Cm(0.5)
+                for cl in code_buf:
+                    cp = code_p.add_run(cl)
+                    cp.font.name = CODE_FONT
+                    cp.font.size = Pt(9)
+                code_p.add_run().font.size = Pt(9)
+                code_buf = []
+                continue
+
+        if in_code_block:
+            code_buf.append(raw_line)
+            continue
+
+        # 空行
+        if not line:
+            doc.add_paragraph()
+            continue
+
+        # 二级标题
+        m = re.match(r'^##\s+(.+)', line)
+        if m:
+            heading_text = m.group(1)
+            if ch8_prefix:
+                _h2_seq += 1
+                heading_text = f'8.{_h2_seq} {heading_text}'
+            h = doc.add_heading(heading_text, level=2)
+            for run in h.runs:
+                run.font.size = Pt(12)
+            continue
+
+        # 三级标题
+        m = re.match(r'^###\s+(.+)', line)
+        if m:
+            h = doc.add_heading(m.group(1), level=3)
+            for run in h.runs:
+                run.font.size = Pt(11)
+            continue
+
+        # 一级标题（少见）
+        m = re.match(r'^#\s+(.+)', line)
+        if m:
+            h = doc.add_heading(m.group(1), level=1)
+            for run in h.runs:
+                run.font.size = Pt(13)
+            continue
+
+        # 引用块
+        if line.startswith('>'):
+            q = doc.add_paragraph()
+            q.paragraph_format.left_indent = Cm(1)
+            q.paragraph_format.first_line_indent = Cm(-0.5)
+            _add_run(q, line.lstrip('>').strip(), default_size)
+            continue
+
+        # 列表项
+        m = re.match(r'^([-*•])\s+(.+)', line)
+        if m:
+            bp = doc.add_paragraph(style='List Bullet')
+            _add_run(bp, m.group(2), default_size)
+            continue
+
+        # 序号列表
+        m = re.match(r'^\d+\.\s+(.+)', line)
+        if m:
+            op = doc.add_paragraph(style='List Number')
+            _add_run(op, m.group(1), default_size)
+            continue
+
+        # 水平线（---），直接跳过不渲染
+        if re.match(r'^[-*_]{3,}\s*$', line):
+            continue
+
+        # 普通段落
+        p = doc.add_paragraph()
+        _add_run(p, line, default_size)
+
 # 内置SQL模板配置
 SQL_TEMPLATES_CONTENT = """
 [report]
@@ -451,7 +586,7 @@ class LocalSystemInfoCollector:
                 'swap_usage_percent': swap.percent
             }
         except Exception as e:
-            print(_t("mysql_cli_local_mem_fail").format(e=e))
+            print("获取内存信息失败: %s" % str(e))
             return {}
 
     def get_disk_info(self):
@@ -496,8 +631,7 @@ class LocalSystemInfoCollector:
                         }
                     except Exception: pass
             return disk_info
-        except Exception as e:
-            print(_t("mysql_cli_local_disk_fail").format(e=e))
+        except Exception:
             return {}
 
     def get_system_info(self):
@@ -721,7 +855,7 @@ class WordTemplateGenerator:
         title_run.font.bold = True
         self.doc.add_paragraph()
         table = self.doc.add_table(rows=8, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -767,7 +901,7 @@ class WordTemplateGenerator:
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -803,7 +937,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=4)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         for i in range(4):
             table.columns[i].width = Cm(3.5)
@@ -829,7 +963,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=4)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         for i in range(4):
             table.columns[i].width = Cm(3.5)
@@ -855,7 +989,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         table.columns[0].width = Cm(8)
@@ -896,7 +1030,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=5, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -927,7 +1061,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=5, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -958,7 +1092,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=5, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -1001,7 +1135,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -1023,7 +1157,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=3, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -1048,7 +1182,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=3, cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
@@ -1085,7 +1219,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=4)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(3)
@@ -1118,7 +1252,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=6)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(2)
         table.columns[1].width = Cm(2)
@@ -1170,7 +1304,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.size = Pt(12)
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.autofit = False
         table.columns[0].width = Cm(3)
         table.columns[1].width = Cm(3)
@@ -1824,7 +1958,6 @@ class getData(object):
         :param ssh_info: SSH 连接信息字典（可选），含 ssh_host、ssh_port、ssh_user、
                          ssh_password、ssh_key_file 字段；为空则使用本地采集模式
         """
-        self.label = str(infos.label)
         self.H = ip
         self.P = int(port)
         self.user = user
@@ -2012,9 +2145,11 @@ class getData(object):
             if advisor.enabled:
                 label = self.context.get('co_name', [{}])[0].get('CO_NAME', 'MySQL')
                 print("\n🤖 " + _t("mysql_cli_ai_calling").format(backend=advisor.backend, model=advisor.model))
-                ai_advice = advisor.diagnose('mysql', label, self.context, issues, lang=self._lang)
+                ai_advice = advisor.diagnose('mysql', label, self.context, issues, lang=_MYSQL_LANG)
                 self.context['ai_advice'] = ai_advice
         except Exception as e:
+            print(f"AI 诊断异常: {e}")
+            import traceback; traceback.print_exc()
             self.context['ai_advice'] = ''
 
         self.print_progress_bar(total_steps, total_steps, prefix=_t('mysql_cli_progress_prefix'), suffix=_t('mysql_cli_complete_suffix'))
@@ -2048,6 +2183,27 @@ class saveDoc(object):
             return t(key, self._lang)
         except Exception:
             return key
+
+    def _set_cell_bg(self, cell, hex_color):
+        from docx.oxml.ns import nsdecls
+        from docx.oxml import parse_xml
+        try:
+            shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
+            cell._tc.get_or_add_tcPr().append(shading)
+        except Exception:
+            pass
+
+    def _set_table_header(self, table, header_bg='336699'):
+        """设置表格表头行样式（蓝色背景+白色粗体居中），需在表头文本设置完成后调用"""
+        hdr = table.rows[0].cells
+        for cell in hdr:
+            self._set_cell_bg(cell, header_bg)
+            for para in cell.paragraphs:
+                for run in para.runs:
+                    run.bold = True
+                    run.font.color.rgb = RGBColor(255, 255, 255)
+                    run.font.size = Pt(9)
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     def contextsave(self):
         """
@@ -2154,12 +2310,15 @@ class saveDoc(object):
                     doc2.add_heading('7.1 ' + self._t('report.risk_detail_chapter'), level=2)
                     col_w = [Cm(0.8), Cm(3.2), Cm(1.5), Cm(4.0), Cm(1.0), Cm(1.5), Cm(4.0)]
                     tbl = doc2.add_table(rows=1+len(auto_analyze), cols=7)
-                    tbl.style = 'Light Grid Accent 1'
+                    tbl.style = 'Table Grid'
                     hdrs = [self._t('report.col_seq'), self._t('report.col_risk_item'), self._t('report.col_level'), self._t('report.col_desc'), self._t('report.col_priority'), self._t('report.col_owner'), self._t('report.col_fix')]
                     for j,(cell,ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
                         cell.text = ht
+                        self._set_cell_bg(cell, '336699')
                         cell.paragraphs[0].runs[0].bold = True
                         cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                         cell.width = col_w[j]
                     for idx,item in enumerate(auto_analyze,1):
                         row = tbl.rows[idx].cells
@@ -2195,25 +2354,16 @@ class saveDoc(object):
                         if qp.runs: qp.runs[0].font.size = Pt(9)
 
                 # 第 8 章 AI 智能诊断建议
-                ai_advice = self.context.get('ai_advice','').strip()
+                ai_advice = self.context.get('ai_advice', '').strip()
                 doc2.add_heading('8. ' + self._t('report.ai_chapter'), level=1)
                 if ai_advice:
                     p = doc2.add_paragraph()
                     p.add_run(self._t('report.ai_disclaimer')).italic = True
                     doc2.add_paragraph()
-                    for line in ai_advice.split('\n'):
-                        line = line.strip()
-                        if not line:
-                            doc2.add_paragraph()
-                        elif line.startswith(('- ','* ','• ')):
-                            bp = doc2.add_paragraph(style='List Bullet')
-                            bp.add_run(line[2:]).font.size = Pt(11)
-                        else:
-                            np = doc2.add_paragraph(line)
-                            if np.runs: np.runs[0].font.size = Pt(11)
-                    else:
-                        p = doc2.add_paragraph()
-                        p.add_run(self._t('report.ai_disabled')).italic = True
+                    _render_markdown_to_doc(doc2, ai_advice, default_size=11, ch8_prefix=True)
+                else:
+                    p = doc2.add_paragraph()
+                    p.add_run(self._t('report.ai_disabled')).italic = True
 
                 # 第 9 章 报告说明
                 doc2.add_heading('9. ' + self._t('report.notes_chapter'), level=1)
@@ -2268,7 +2418,7 @@ class saveDoc(object):
             title_run.font.bold = True
             doc.add_paragraph()
             table = doc.add_table(rows=8, cols=2)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             table.columns[0].width = Cm(4)
             table.columns[1].width = Cm(10)
             data_map = [
@@ -2291,16 +2441,27 @@ class saveDoc(object):
                             run.font.size = Pt(11)
             doc.add_page_break()
             doc.add_heading('1. ' + self._t('report.fallback_health_overview'), level=1)
+            col_w = [Cm(4), Cm(10)]
             table = doc.add_table(rows=2, cols=2)
-            table.style = 'Light Grid Accent 1'
-            table.columns[0].width = Cm(4)
-            table.columns[1].width = Cm(10)
-            cells = table.rows[0].cells
-            cells[0].text = self._t("report.fallback_overall_health")
-            cells[1].text = self.context.get('health_status', 'N/A')
+            table.style = 'Table Grid'
+            hdr = table.rows[0].cells
+            hdr_texts = [self._t("report.fallback_overall_health"), self.context.get('health_status', 'N/A')]
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
             cells = table.rows[1].cells
             cells[0].text = self._t("report.fallback_issue_count")
             cells[1].text = f"{self.context.get('problem_count', 0)}"
+            for j, c in enumerate(cells):
+                c.width = col_w[j]
+                for para in c.paragraphs:
+                    for run in para.runs:
+                        run.font.size = Pt(9)
             doc.add_paragraph()
             p = doc.add_paragraph(self._t("report.fallback_health_summary") + ": ")
             p.add_run(self.context.get('health_summary', [{}])[0].get('health_summary', self._t('report.running_ok'))).bold = True
@@ -2309,47 +2470,93 @@ class saveDoc(object):
             cpu = self.context.get('system_info', {}).get('cpu', {})
             mem = self.context.get('system_info', {}).get('memory', {})
             doc.add_heading('2.1 ' + self._t('report.fallback_cpu_info'), level=2)
+            col_w = [Cm(3.5), Cm(3.5), Cm(3.5), Cm(3.5)]
             table = doc.add_table(rows=2, cols=4)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
-            hdr[0].text = self._t('report.fallback_cpu_usage')
-            hdr[1].text = self._t('report.fallback_physical_cores')
-            hdr[2].text = self._t('report.fallback_logical_cores')
-            hdr[3].text = self._t('report.fallback_freq_ghz')
+            hdr_texts = [
+                self._t('report.fallback_cpu_usage'),
+                self._t('report.fallback_physical_cores'),
+                self._t('report.fallback_logical_cores'),
+                self._t('report.fallback_freq_ghz')
+            ]
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
             row = table.rows[1].cells
             row[0].text = f"{cpu.get('usage_percent', 'N/A')}%"
             row[1].text = str(cpu.get('physical_cores', 'N/A'))
             row[2].text = str(cpu.get('logical_cores', 'N/A'))
             freq = cpu.get('current_frequency', 0)
             row[3].text = f"{freq/1000:.2f}" if isinstance(freq, (int, float)) and freq > 100 else str(freq)
+            for j, c in enumerate(row):
+                c.width = col_w[j]
+                for para in c.paragraphs:
+                    for run in para.runs:
+                        run.font.size = Pt(9)
             doc.add_paragraph()
+
             doc.add_heading('2.2 ' + self._t('report.fallback_memory_info'), level=2)
+            col_w = [Cm(3.5), Cm(3.5), Cm(3.5), Cm(3.5)]
             table = doc.add_table(rows=2, cols=4)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
-            hdr[0].text = self._t('report.fallback_total_gb')
-            hdr[1].text = self._t('report.fallback_used_gb')
-            hdr[2].text = self._t('report.fallback_available_gb')
-            hdr[3].text = self._t('report.fallback_usage_pct')
+            hdr_texts = [
+                self._t('report.fallback_total_gb'),
+                self._t('report.fallback_used_gb'),
+                self._t('report.fallback_available_gb'),
+                self._t('report.fallback_usage_pct')
+            ]
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
             row = table.rows[1].cells
             row[0].text = f"{mem.get('total_gb', 'N/A')}"
             row[1].text = f"{mem.get('used_gb', 'N/A')}"
             row[2].text = f"{mem.get('available_gb', 'N/A')}"
             row[3].text = f"{mem.get('usage_percent', 'N/A')}%"
+            for j, c in enumerate(row):
+                c.width = col_w[j]
+                for para in c.paragraphs:
+                    for run in para.runs:
+                        run.font.size = Pt(9)
             doc.add_paragraph()
+
             doc.add_heading('2.3 ' + self._t('report.fallback_disk_info'), level=2)
             disk_list = self.context.get('system_info', {}).get('disk_list', [])
+            col_w = [Cm(7), Cm(7)]
             table = doc.add_table(rows=1+len(disk_list), cols=2)
-            table.style = 'Light Grid Accent 1'
-            table.columns[0].width = Cm(8)
-            table.columns[1].width = Cm(4)
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
-            hdr[0].text = self._t('report.fallback_mountpoint')
-            hdr[1].text = self._t('report.fallback_usage_pct')
+            hdr_texts = [self._t('report.fallback_mountpoint'), self._t('report.fallback_usage_pct')]
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
             for i, disk in enumerate(disk_list, 1):
                 cells = table.rows[i].cells
                 cells[0].text = disk.get('mountpoint', 'N/A')
                 cells[1].text = f"{disk.get('usage_percent', 0):.2f}%"
+                for j, c in enumerate(cells):
+                    c.width = col_w[j]
+                    for para in c.paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(9)
+
 
             doc.add_heading('3. ' + self._t('report.fallback_mysql_config'), level=1)
             doc.add_heading('3.1 ' + self._t('report.fallback_conn_config'), level=2)
@@ -2384,45 +2591,83 @@ class saveDoc(object):
             ], col1_width=4, col2_width=10)
             doc.add_heading('4.3 ' + self._t('report.fallback_abnormal_conn'), level=2)
             aborted = self.context.get('aborted_connections', [])
+            col_w = [Cm(7), Cm(7)]
             table = doc.add_table(rows=3, cols=2)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
-            hdr[0].text = self._t('report.fallback_abnormal_type')
-            hdr[1].text = 'Value'
+            hdr_texts = [self._t('report.fallback_abnormal_type'), 'Value']
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
             cells = table.rows[1].cells
             cells[0].text = self._t('report.fallback_abnormal_client')
             cells[1].text = aborted[0]['Value'] if len(aborted) > 0 else 'N/A'
+            for c, w in zip(cells, col_w): c.width = w
             cells = table.rows[2].cells
             cells[0].text = self._t('report.fallback_abnormal_attempt')
             cells[1].text = aborted[1]['Value'] if len(aborted) > 1 else 'N/A'
+            for c, w in zip(cells, col_w): c.width = w
 
             doc.add_heading('5. ' + self._t('report.fallback_db_info'), level=1)
             doc.add_heading('5.1 ' + self._t('report.fallback_db_size'), level=2)
             db_size = self.context.get('db_size', [])
+            col_w = [Cm(3.5), Cm(3.5), Cm(3.5), Cm(3.5)]
             table = doc.add_table(rows=1+len(db_size), cols=4)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
-            hdr[0].text = self._t('report.fallback_dbname')
-            hdr[1].text = self._t('report.fallback_table_rows')
-            hdr[2].text = self._t('report.fallback_data_size_mb')
-            hdr[3].text = self._t('report.fallback_index_size_mb')
+            hdr_texts = [
+                self._t('report.fallback_dbname'),
+                self._t('report.fallback_table_rows'),
+                self._t('report.fallback_data_size_mb'),
+                self._t('report.fallback_index_size_mb')
+            ]
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
             for i, db in enumerate(db_size, 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(db.get('Database_name', ''))
                 cells[1].text = str(db.get('No_of_rows', ''))
                 cells[2].text = str(db.get('Size_data_MB', ''))
                 cells[3].text = str(db.get('Size_index_MB', ''))
+                for j, c in enumerate(cells):
+                    c.width = col_w[j]
+                    for para in c.paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(9)
+
             doc.add_heading('5.2 ' + self._t('report.fallback_processlist'), level=2)
             proc = self.context.get('processlist', [])
+            col_w = [Cm(2.3), Cm(2.3), Cm(2.3), Cm(2.3), Cm(2.3), Cm(2.3)]
             table = doc.add_table(rows=1+min(len(proc), 20), cols=6)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
-            hdr[0].text = self._t('report.fallback_process_id')
-            hdr[1].text = self._t('report.fallback_process_user')
-            hdr[2].text = self._t('report.fallback_process_db')
-            hdr[3].text = self._t('report.fallback_process_state')
-            hdr[4].text = self._t('report.fallback_process_command')
-            hdr[5].text = self._t('report.fallback_process_time')
+            hdr_texts = [
+                self._t('report.fallback_process_id'),
+                self._t('report.fallback_process_user'),
+                self._t('report.fallback_process_db'),
+                self._t('report.fallback_process_state'),
+                self._t('report.fallback_process_command'),
+                self._t('report.fallback_process_time')
+            ]
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
             for i, p in enumerate(proc[:20], 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(p.get('Id', ''))
@@ -2431,18 +2676,34 @@ class saveDoc(object):
                 cells[3].text = str(p.get('State', ''))
                 cells[4].text = str(p.get('Command', ''))
                 cells[5].text = str(p.get('Time', ''))
+                for j, c in enumerate(cells):
+                    c.width = col_w[j]
+                    for para in c.paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(9)
 
             doc.add_heading('6. ' + self._t('report.fallback_security_info'), level=1)
             doc.add_heading('6.1 ' + self._t('report.fallback_db_users'), level=2)
             users = self.context.get('mysql_users', [])
+            col_w = [Cm(2.8), Cm(2.8), Cm(2.8), Cm(2.8), Cm(2.8)]
             table = doc.add_table(rows=1+len(users), cols=5)
-            table.style = 'Light Grid Accent 1'
+            table.style = 'Table Grid'
             hdr = table.rows[0].cells
-            hdr[0].text = self._t('report.fallback_username')
-            hdr[1].text = self._t('report.fallback_host')
-            hdr[2].text = self._t('report.fallback_privileges')
-            hdr[3].text = self._t('report.fallback_auth_plugin')
-            hdr[4].text = self._t('report.fallback_account_locked')
+            hdr_texts = [
+                self._t('report.fallback_username'),
+                self._t('report.fallback_host'),
+                self._t('report.fallback_privileges'),
+                self._t('report.fallback_auth_plugin'),
+                self._t('report.fallback_account_locked')
+            ]
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
             for i, u in enumerate(users, 1):
                 cells = table.rows[i].cells
                 cells[0].text = str(u.get('col1', ''))
@@ -2450,6 +2711,11 @@ class saveDoc(object):
                 cells[2].text = str(u.get('col3', ''))
                 cells[3].text = str(u.get('col4', ''))
                 cells[4].text = str(u.get('col5', ''))
+                for j, c in enumerate(cells):
+                    c.width = col_w[j]
+                    for para in c.paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(9)
 
             doc.add_heading('7. ' + self._t('report.fallback_risk_chapter'), level=1)
 
@@ -2477,7 +2743,7 @@ class saveDoc(object):
                 # 列：序号、风险项、等级、详细描述、优先级、负责人、修复建议
                 col_widths = [Cm(0.8), Cm(3.2), Cm(1.5), Cm(4.0), Cm(1.0), Cm(1.5), Cm(4.0)]
                 tbl = doc.add_table(rows=1 + len(auto_analyze), cols=7)
-                tbl.style = 'Light Grid Accent 1'
+                tbl.style = 'Table Grid'
                 hdr = tbl.rows[0].cells
                 headers = [
                     self._t('report.fallback_seq'),
@@ -2490,8 +2756,11 @@ class saveDoc(object):
                 ]
                 for j, (cell, hdr_text) in enumerate(zip(hdr, headers)):
                     cell.text = hdr_text
+                    self._set_cell_bg(cell, '336699')
                     cell.paragraphs[0].runs[0].bold = True
                     cell.paragraphs[0].runs[0].font.size = Pt(9)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                     cell.width = col_widths[j]
                 for idx, item in enumerate(auto_analyze, 1):
                     row = tbl.rows[idx].cells
@@ -2541,16 +2810,7 @@ class saveDoc(object):
                 p = doc.add_paragraph()
                 p.add_run(self._t('report.fallback_ai_disclaimer')).italic = True
                 doc.add_paragraph()
-                # 分段渲染：保留列表格式
-                for line in ai_advice.split('\n'):
-                    line = line.strip()
-                    if not line:
-                        doc.add_paragraph()
-                    elif line.startswith(('- ', '* ', '• ')):
-                        p = doc.add_paragraph(style='List Bullet')
-                        p.add_run(line[2:]).font.size = Pt(11)
-                    else:
-                        doc.add_paragraph(line).runs[0].font.size = Pt(11)
+                _render_markdown_to_doc(doc, ai_advice, default_size=11, ch8_prefix=True)
             else:
                 p = doc.add_paragraph()
                 p.add_run(self._t('report.ai_disabled')).italic = True
@@ -2604,11 +2864,12 @@ class saveDoc(object):
         :param col2_width: 第 2 列宽度（cm），默认 10
         """
         table = doc.add_table(rows=1+len(items), cols=2)
-        table.style = 'Light Grid Accent 1'
+        table.style = 'Table Grid'
         table.columns[0].width = Cm(col1_width)
         table.columns[1].width = Cm(col2_width)
         hdr = table.rows[0].cells
         hdr[0].text, hdr[1].text = '配置项', '当前值'
+        self._set_table_header(table)
         for i, (label, key) in enumerate(items, 1):
             cells = table.rows[i].cells
             cells[0].text = label
