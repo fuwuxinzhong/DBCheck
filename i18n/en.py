@@ -431,6 +431,8 @@ EN = {
     "report.fallback_platform": "Server Platform",
     "report.fallback_report_time": "Report Generation Time",
     "report.fallback_health_overview": "Health Status Overview",
+    "report.fallback_item_col": "Item",
+    "report.fallback_value_col": "Value",
     "report.fallback_overall_health": "Overall Health Status",
     "report.fallback_issue_count": "Issues Found",
     "report.fallback_health_summary": "Health Summary",

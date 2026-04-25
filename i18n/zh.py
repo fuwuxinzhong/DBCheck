@@ -431,6 +431,8 @@ ZI = {
     "report.fallback_platform": "服务器平台",
     "report.fallback_report_time": "报告生成时间",
     "report.fallback_health_overview": "健康状态概览",
+    "report.fallback_item_col": "项目",
+    "report.fallback_value_col": "当前值",
     "report.fallback_overall_health": "总体健康状态",
     "report.fallback_issue_count": "发现问题数量",
     "report.fallback_health_summary": "健康总结",

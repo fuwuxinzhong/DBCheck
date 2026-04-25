@@ -910,13 +910,13 @@ class WordTemplateGenerator:
         cells[1].text = "{{ health_status }}"
         cells = table.rows[1].cells
         cells[0].text = self._t('report.fallback_issue_count')
-        cells[1].text = "{{ problem_count }} 个"
+        cells[1].text = "{{ problem_count }}"
         for row in table.rows:
             for cell in row.cells:
                 cell.paragraphs[0].runs[0].font.size = Pt(11)
                 cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         self.doc.add_paragraph()
-        p = self.doc.add_paragraph("健康总结: ")
+        p = self.doc.add_paragraph(self._t("report.fallback_health_summary") + ": ")
         p.add_run("{{ health_summary[0]['health_summary'] }}").bold = True
         p.runs[0].font.size = Pt(11)
         p.runs[1].font.size = Pt(11)
@@ -1969,6 +1969,14 @@ class getData(object):
             print(f"❌ 数据库连接失败: {e}")
             self.conn_db2 = None
         self.context = {}
+
+    def _t(self, key):
+        try:
+            from i18n import t
+            return t(key, _MYSQL_LANG)
+        except Exception:
+            return key
+
     def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█'):
         """
         在终端打印文字版进度条（覆盖当前行）。
@@ -2036,11 +2044,11 @@ class getData(object):
             mysql_version = version_result[0] if version_result else "Unknown"
             cursor_ver.close()
             self.context.update({"myversion": [{'version': mysql_version}]})
-            self.context.update({"health_summary": [{'health_summary': '运行良好'}]})
+            self.context.update({"health_summary": [{'health_summary': self._t("report.running_ok")}]})
         except Exception as e:
             print(f"❌ 获取版本信息失败: {e}")
             self.context.update({"myversion": [{'version': 'Unknown'}]})
-            self.context.update({"health_summary": [{'health_summary': '运行良好'}]})
+            self.context.update({"health_summary": [{'health_summary': self._t("report.running_ok")}]})
         try:
             cursor2 = self.conn_db2.cursor()
             variables_items = list(cfg.items("variables"))
@@ -2285,6 +2293,133 @@ class saveDoc(object):
                     for para in list(body.iterchildren())[cutoff_idx:]:
                         body.remove(para)
 
+                # 翻译 auto_analyze 中的中文值 -> 英文翻译
+                _MYSQL_RISK_KEY_MAP = {
+                    '高风险': 'report.risk_high',
+                    '中风险': 'report.risk_mid',
+                    '低风险': 'report.risk_low',
+                    '建议': 'report.risk_suggest',
+                }
+                _MYSQL_PRIORITY_MAP = {
+                    '高': 'report.severity_high',
+                    '中': 'report.severity_mid',
+                    '低': 'report.severity_low',
+                }
+                _MYSQL_OWNER_MAP = {
+                    'DBA': 'report.pg_fallback_owner_dba',
+                    '系统管理员': 'report.pg_fallback_owner_sysadmin',
+                }
+                _MYSQL_COL1_MAP = {
+                    '连接数使用率': 'Connection Usage Rate',
+                    '长时间运行的 SQL': 'Long Running SQL',
+                    '慢查询日志未开启': 'Slow Query Log Not Enabled',
+                    'binlog 未开启': 'binlog Not Enabled',
+                    'binlog 永不过期': 'binlog Never Expires',
+                    'InnoDB 缓冲池偏小': 'InnoDB Buffer Pool Too Small',
+                    '查询缓存已开启（不建议）': 'Query Cache Enabled (Not Recommended)',
+                    '表锁等待比例过高': 'High Table Lock Wait Ratio',
+                    '异常中止连接数较多': 'Many Aborted Connections',
+                    'root 用户允许所有主机连接': 'Root User Allows Remote Connections',
+                    '复制线程异常': 'Replication Thread Abnormal',
+                    '主从复制延迟过高': 'Replica Lag Too High',
+                    '表缓存命中率低': 'Low Table Cache Hit Rate',
+                    '系统内存使用率': 'System Memory Usage',
+                    'innodb_flush_log_at_trx_commit=0': 'innodb_flush_log_at_trx_commit=0',
+                    '数据库字符集非 UTF8': 'Database Charset Not UTF8',
+                }
+                _MYSQL_COL3_DESC_MAP = {
+                    '历史最大连接数使用率高达 ': 'Historical max connection usage rate reached ',
+                    '（': ' (',
+                    '），极有可能出现拒绝连接': '), very likely to reject new connections',
+                    '连接数使用率达 ': 'Connection usage rate reached ',
+                    '），建议提前关注': '), recommend proactive monitoring',
+                    '发现 ': 'Found ',
+                    ' 个执行超过 60 秒的 SQL，可能导致锁等待和性能下降': ' SQL(s) running over 60 seconds, may cause lock waits and performance degradation',
+                    '个执行超过 60 秒的 SQL，可能导致锁等待和性能下降': ' SQL(s) running over 60 seconds, may cause lock waits and performance degradation',
+                    '慢查询日志已关闭，无法追踪性能问题，建议开启': 'Slow query log is disabled, cannot trace performance issues, recommend enabling',
+                    'binlog 未开启，无法实现基于时间点的数据恢复，生产环境建议开启': 'binlog is not enabled, point-in-time recovery not possible, recommend enabling in production',
+                    'binlog 未开启': 'binlog is not enabled',
+                    'expire_logs_days=0 表示 binlog 永不自动清理，可能导致磁盘耗尽': 'expire_logs_days=0 means binlog never auto-cleanup, may exhaust disk space',
+                    'innodb_buffer_pool_size 仅 ': 'innodb_buffer_pool_size is only ',
+                    '，建议设置为物理内存的 50%~70%': ', recommend setting to 50%~70% of physical memory',
+                    'query_cache 在高并发场景下会造成严重锁竞争，MySQL 8.0 已彻底移除，建议关闭': 'query_cache causes severe lock contention in high concurrency scenarios, removed in MySQL 8.0, recommend disabling',
+                    '表锁等待比例达 ': 'Table lock wait ratio reached ',
+                    '（等待次数 ': ' (wait count ',
+                    '），存在大量锁竞争': '), heavy lock contention exists',
+                    '累计中止连接数达 ': 'Cumulative aborted connections reached ',
+                    '，可能存在连接池配置异常或网络问题': ', possible connection pool misconfiguration or network issues',
+                    '数据库用户 ': 'Database user ',
+                    ' 未设置密码，存在严重安全风险': ' has no password set, serious security risk',
+                    "root@'%' 允许从任意主机登录，存在严重安全风险，建议限制为本地": "root@'%' allows login from any host, serious security risk, recommend restricting to localhost",
+                    '复制状态异常：IO线程=': 'Replication status abnormal: IO thread=',
+                    '，SQL线程=': ', SQL thread=',
+                    '从库延迟 ': 'Replica lag ',
+                    ' 秒，数据同步滞后，读操作可能读到旧数据': ' seconds, data sync lagging, read operations may get stale data',
+                    '已打开表数(': 'Opened tables (',
+                    ') 接近 table_open_cache(': ') close to table_open_cache(',
+                    '），可能频繁开关文件句柄': '), may frequently open/close file handles',
+                    '系统内存使用率 ': 'System memory usage ',
+                    '，超过 90% 可能触发 OOM Killer': ', over 90% may trigger OOM Killer',
+                    '，建议关注内存增长趋势': ', recommend monitoring memory growth trend',
+                    '磁盘 ': 'Disk ',
+                    ' 使用率 ': ' usage ',
+                    '，可能导致数据库写入失败': ', may cause database write failures',
+                    '，建议及时清理或扩容': ', recommend cleaning up or expanding capacity',
+                    '设置为 0 时 MySQL 崩溃可能丢失最多 1 秒的事务，生产环境建议设为 1': 'Setting to 0 may lose up to 1 second of transactions when MySQL crashes, recommend setting to 1 in production',
+                    '当前字符集为 ': 'Current charset is ',
+                    '，建议统一使用 utf8mb4 以支持 emoji 和多语言': ', recommend using utf8mb4 for emoji and multilingual support',
+                }
+                _MYSQL_FIX_SQL_DESC_MAP = {
+                    '-- 需在 my.cnf 中添加：': '-- Need to add in my.cnf:',
+                    '-- 然后重启 MySQL': '-- Then restart MySQL',
+                    '-- 建议修改 my.cnf：': '-- Recommend editing my.cnf:',
+                    '-- 根据实际内存调整': '-- Adjust based on actual memory',
+                    '# 根据实际内存调整': '# Adjust based on actual memory',
+                    '-- 或在线调整（MySQL 5.7+）：': '-- Or adjust online (MySQL 5.7+):',
+                    '-- 4G': '-- 4G',
+                    '-- 排查锁等待来源：': '-- Investigate lock wait source:',
+                    '-- 查看详情：': '-- View details:',
+                    '-- 检查 interactive_timeout / wait_timeout 设置：': '-- Check interactive_timeout / wait_timeout settings:',
+                    '-- 清理旧 binlog：': '-- Clean up old binlog:',
+                    '-- 查看数据库占用：': '-- Check database space usage:',
+                    '-- 修改 my.cnf：': '-- Edit my.cnf:',
+                    '-- collation-server = utf8mb4_unicode_ci': '-- collation-server = utf8mb4_unicode_ci',
+                    'DROP USER \'root\'@\'%\';': 'DROP USER \'root\'@\'%\';',
+                    'CREATE USER \'root\'@\'localhost\' IDENTIFIED BY \'强密码请替换\';': 'CREATE USER \'root\'@\'localhost\' IDENTIFIED BY \'strong_password_here\';',
+                    '强密码请替换': 'strong_password_here',
+                    'GRANT ALL PRIVILEGES ON *.* TO \'root\'@\'localhost\' WITH GRANT OPTION;': 'GRANT ALL PRIVILEGES ON *.* TO \'root\'@\'localhost\' WITH GRANT OPTION;',
+                }
+                for item in self.context.get('auto_analyze', []):
+                    col1 = item.get('col1', '')
+                    if col1 in _MYSQL_COL1_MAP:
+                        item['col1'] = self._t(_MYSQL_COL1_MAP[col1])
+                    col2 = item.get('col2', '')
+                    if col2 in _MYSQL_RISK_KEY_MAP:
+                        item['col2'] = self._t(_MYSQL_RISK_KEY_MAP[col2])
+                    col4 = item.get('col4', '')
+                    if col4 in _MYSQL_PRIORITY_MAP:
+                        item['col4'] = self._t(_MYSQL_PRIORITY_MAP[col4])
+                    col5 = item.get('col5', '')
+                    if col5 in _MYSQL_OWNER_MAP:
+                        item['col5'] = self._t(_MYSQL_OWNER_MAP[col5])
+                    if self._lang != 'zh':
+                        # 处理动态 col1（包含变量）的中文片段
+                        col1 = item.get('col1', '')
+                        if col1:
+                            col1 = col1.replace('用户 ', 'User ').replace(' 空密码', ' empty password')
+                            col1 = col1.replace('磁盘空间紧张 (', 'Disk space critical (').replace('磁盘空间预警 (', 'Disk space warning (').replace(') ', ') ')
+                            item['col1'] = col1
+                        col3 = item.get('col3', '')
+                        if col3:
+                            for zh_frag, en_frag in _MYSQL_COL3_DESC_MAP.items():
+                                col3 = col3.replace(zh_frag, en_frag)
+                            item['col3'] = col3
+                        fix_sql = item.get('fix_sql', '')
+                        if fix_sql:
+                            for zh_frag, en_frag in _MYSQL_FIX_SQL_DESC_MAP.items():
+                                fix_sql = fix_sql.replace(zh_frag, en_frag)
+                            item['fix_sql'] = fix_sql
+
                 auto_analyze = self.context.get('auto_analyze', [])
                 high_risk = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_high')]
                 mid_risk  = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_mid')]
@@ -2442,10 +2577,10 @@ class saveDoc(object):
             doc.add_page_break()
             doc.add_heading('1. ' + self._t('report.fallback_health_overview'), level=1)
             col_w = [Cm(4), Cm(10)]
-            table = doc.add_table(rows=2, cols=2)
+            table = doc.add_table(rows=3, cols=2)
             table.style = 'Table Grid'
             hdr = table.rows[0].cells
-            hdr_texts = [self._t("report.fallback_overall_health"), self.context.get('health_status', 'N/A')]
+            hdr_texts = [self._t("report.fallback_item_col"), self._t("report.fallback_value_col")]
             for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
                 cell.text = ht
                 self._set_cell_bg(cell, '336699')
@@ -2454,7 +2589,17 @@ class saveDoc(object):
                 cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
                 cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                 cell.width = col_w[j]
+            # 第1行数据
             cells = table.rows[1].cells
+            cells[0].text = self._t("report.fallback_overall_health")
+            cells[1].text = self.context.get('health_status', 'N/A')
+            for j, c in enumerate(cells):
+                c.width = col_w[j]
+                for para in c.paragraphs:
+                    for run in para.runs:
+                        run.font.size = Pt(9)
+            # 第2行数据
+            cells = table.rows[2].cells
             cells[0].text = self._t("report.fallback_issue_count")
             cells[1].text = f"{self.context.get('problem_count', 0)}"
             for j, c in enumerate(cells):
@@ -2720,6 +2865,106 @@ class saveDoc(object):
             doc.add_heading('7. ' + self._t('report.fallback_risk_chapter'), level=1)
 
             # ── 7.1 概览统计 ──
+            # 翻译 auto_analyze 中的中文值 -> 英文翻译
+            _MYSQL_RISK_KEY_MAP = {
+                '高风险': 'report.risk_high',
+                '中风险': 'report.risk_mid',
+                '低风险': 'report.risk_low',
+                '建议': 'report.risk_suggest',
+            }
+            _MYSQL_PRIORITY_MAP = {
+                '高': 'report.severity_high',
+                '中': 'report.severity_mid',
+                '低': 'report.severity_low',
+            }
+            _MYSQL_OWNER_MAP = {
+                'DBA': 'report.pg_fallback_owner_dba',
+                '系统管理员': 'report.pg_fallback_owner_sysadmin',
+            }
+            _MYSQL_COL3_DESC_MAP = {
+                '历史最大连接数使用率高达 ': 'Historical max connection usage rate reached ',
+                '（': ' (',
+                '），极有可能出现拒绝连接': '), very likely to reject new connections',
+                '连接数使用率达 ': 'Connection usage rate reached ',
+                '），建议提前关注': '), recommend proactive monitoring',
+                '发现 ': 'Found ',
+                ' 个执行超过 60 秒的 SQL，可能导致锁等待和性能下降': ' SQL(s) running over 60 seconds, may cause lock waits and performance degradation',
+                '个执行超过 60 秒的 SQL，可能导致锁等待和性能下降': ' SQL(s) running over 60 seconds, may cause lock waits and performance degradation',
+                '慢查询日志已关闭，无法追踪性能问题，建议开启': 'Slow query log is disabled, cannot trace performance issues, recommend enabling',
+                'binlog 未开启，无法实现基于时间点的数据恢复，生产环境建议开启': 'binlog is not enabled, point-in-time recovery not possible, recommend enabling in production',
+                'binlog 未开启': 'binlog is not enabled',
+                'expire_logs_days=0 表示 binlog 永不自动清理，可能导致磁盘耗尽': 'expire_logs_days=0 means binlog never auto-cleanup, may exhaust disk space',
+                'innodb_buffer_pool_size 仅 ': 'innodb_buffer_pool_size is only ',
+                '，建议设置为物理内存的 50%~70%': ', recommend setting to 50%~70% of physical memory',
+                'query_cache 在高并发场景下会造成严重锁竞争，MySQL 8.0 已彻底移除，建议关闭': 'query_cache causes severe lock contention in high concurrency scenarios, removed in MySQL 8.0, recommend disabling',
+                '表锁等待比例达 ': 'Table lock wait ratio reached ',
+                '（等待次数 ': ' (wait count ',
+                '），存在大量锁竞争': '), heavy lock contention exists',
+                '累计中止连接数达 ': 'Cumulative aborted connections reached ',
+                '，可能存在连接池配置异常或网络问题': ', possible connection pool misconfiguration or network issues',
+                '数据库用户 ': 'Database user ',
+                ' 未设置密码，存在严重安全风险': ' has no password set, serious security risk',
+                "root@'%' 允许从任意主机登录，存在严重安全风险，建议限制为本地": "root@'%' allows login from any host, serious security risk, recommend restricting to localhost",
+                '复制状态异常：IO线程=': 'Replication status abnormal: IO thread=',
+                '，SQL线程=': ', SQL thread=',
+                '从库延迟 ': 'Replica lag ',
+                ' 秒，数据同步滞后，读操作可能读到旧数据': ' seconds, data sync lagging, read operations may get stale data',
+                '已打开表数(': 'Opened tables (',
+                ') 接近 table_open_cache(': ') close to table_open_cache(',
+                '），可能频繁开关文件句柄': '), may frequently open/close file handles',
+                '系统内存使用率 ': 'System memory usage ',
+                '，超过 90% 可能触发 OOM Killer': ', over 90% may trigger OOM Killer',
+                '，建议关注内存增长趋势': ', recommend monitoring memory growth trend',
+                '磁盘 ': 'Disk ',
+                ' 使用率 ': ' usage ',
+                '，可能导致数据库写入失败': ', may cause database write failures',
+                '，建议及时清理或扩容': ', recommend cleaning up or expanding capacity',
+                '设置为 0 时 MySQL 崩溃可能丢失最多 1 秒的事务，生产环境建议设为 1': 'Setting to 0 may lose up to 1 second of transactions when MySQL crashes, recommend setting to 1 in production',
+                '当前字符集为 ': 'Current charset is ',
+                '，建议统一使用 utf8mb4 以支持 emoji 和多语言': ', recommend using utf8mb4 for emoji and multilingual support',
+            }
+            _MYSQL_FIX_SQL_DESC_MAP = {
+                '-- 需在 my.cnf 中添加：': '-- Need to add in my.cnf:',
+                '-- 然后重启 MySQL': '-- Then restart MySQL',
+                '-- 建议修改 my.cnf：': '-- Recommend editing my.cnf:',
+                '-- 根据实际内存调整': '-- Adjust based on actual memory',
+                '# 根据实际内存调整': '# Adjust based on actual memory',
+                '-- 或在线调整（MySQL 5.7+）：': '-- Or adjust online (MySQL 5.7+):',
+                '-- 4G': '-- 4G',
+                '-- 排查锁等待来源：': '-- Investigate lock wait source:',
+                '-- 查看详情：': '-- View details:',
+                '-- 检查 interactive_timeout / wait_timeout 设置：': '-- Check interactive_timeout / wait_timeout settings:',
+                '-- 清理旧 binlog：': '-- Clean up old binlog:',
+                '-- 查看数据库占用：': '-- Check database space usage:',
+                '-- 修改 my.cnf：': '-- Edit my.cnf:',
+                '-- collation-server = utf8mb4_unicode_ci': '-- collation-server = utf8mb4_unicode_ci',
+                'DROP USER \'root\'@\'%\';': 'DROP USER \'root\'@\'%\';',
+                'CREATE USER \'root\'@\'localhost\' IDENTIFIED BY \'强密码请替换\';': 'CREATE USER \'root\'@\'localhost\' IDENTIFIED BY \'strong_password_here\';',
+                '强密码请替换': 'strong_password_here',
+                'GRANT ALL PRIVILEGES ON *.* TO \'root\'@\'localhost\' WITH GRANT OPTION;': 'GRANT ALL PRIVILEGES ON *.* TO \'root\'@\'localhost\' WITH GRANT OPTION;',
+            }
+            for item in self.context.get('auto_analyze', []):
+                col2 = item.get('col2', '')
+                if col2 in _MYSQL_RISK_KEY_MAP:
+                    item['col2'] = self._t(_MYSQL_RISK_KEY_MAP[col2])
+                col4 = item.get('col4', '')
+                if col4 in _MYSQL_PRIORITY_MAP:
+                    item['col4'] = self._t(_MYSQL_PRIORITY_MAP[col4])
+                col5 = item.get('col5', '')
+                if col5 in _MYSQL_OWNER_MAP:
+                    item['col5'] = self._t(_MYSQL_OWNER_MAP[col5])
+                if self._lang != 'zh':
+                    col3 = item.get('col3', '')
+                    if col3:
+                        for zh_frag, en_frag in _MYSQL_COL3_DESC_MAP.items():
+                            col3 = col3.replace(zh_frag, en_frag)
+                        item['col3'] = col3
+                    fix_sql = item.get('fix_sql', '')
+                    if fix_sql:
+                        for zh_frag, en_frag in _MYSQL_FIX_SQL_DESC_MAP.items():
+                            fix_sql = fix_sql.replace(zh_frag, en_frag)
+                        item['fix_sql'] = fix_sql
+
             auto_analyze = self.context.get('auto_analyze', [])
             high_risk  = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_high')]
             mid_risk   = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_mid')]
@@ -2868,7 +3113,8 @@ class saveDoc(object):
         table.columns[0].width = Cm(col1_width)
         table.columns[1].width = Cm(col2_width)
         hdr = table.rows[0].cells
-        hdr[0].text, hdr[1].text = '配置项', '当前值'
+        hdr[0].text = self._t('report.fallback_item_col')
+        hdr[1].text = self._t('report.fallback_value_col')
         self._set_table_header(table)
         for i, (label, key) in enumerate(items, 1):
             cells = table.rows[i].cells

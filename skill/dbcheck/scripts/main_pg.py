@@ -2614,16 +2614,37 @@ class saveDoc(object):
                             run.font.size = Pt(11)
             doc.add_page_break()
             doc.add_heading('1. ' + self._t('report.fallback_health_overview'), level=1)
-            table = doc.add_table(rows=2, cols=2)
+            col_w = [Cm(4), Cm(10)]
+            table = doc.add_table(rows=3, cols=2)
             table.style = 'Table Grid'
-            table.columns[0].width = Cm(4)
-            table.columns[1].width = Cm(10)
-            cells = table.rows[0].cells
+            hdr = table.rows[0].cells
+            hdr_texts = [self._t("report.fallback_item_col"), self._t("report.fallback_value_col")]
+            for j, (cell, ht) in enumerate(zip(hdr, hdr_texts)):
+                cell.text = ht
+                self._set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
+            # 第1行数据
+            cells = table.rows[1].cells
             cells[0].text = self._t("report.fallback_overall_health")
             cells[1].text = self.context.get('health_status', 'N/A')
-            cells = table.rows[1].cells
+            for j, c in enumerate(cells):
+                c.width = col_w[j]
+                for para in c.paragraphs:
+                    for run in para.runs:
+                        run.font.size = Pt(9)
+            # 第2行数据
+            cells = table.rows[2].cells
             cells[0].text = self._t("report.fallback_issue_count")
             cells[1].text = f"{self.context.get('problem_count', 0)}"
+            for j, c in enumerate(cells):
+                c.width = col_w[j]
+                for para in c.paragraphs:
+                    for run in para.runs:
+                        run.font.size = Pt(9)
             doc.add_paragraph()
             p = doc.add_paragraph(self._t("report.fallback_health_summary") + ": ")
             p.add_run(self.context.get('health_summary', [{}])[0].get('health_summary', self._t('report.running_ok'))).bold = True
