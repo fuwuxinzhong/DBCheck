@@ -97,7 +97,7 @@ Each risk is presented as a card: **Risk Level (High/Medium/Low) → Issue Descr
 | 📊 Historical Trend Analysis | Automatically aggregates data from multiple inspection runs on the same database, generates metric trend line charts, and compares against previous results to surface changes |
 | 🤖 AI-Powered Diagnosis | Calls local Ollama based on inspection metrics to generate personalized optimization recommendations |
 | 🔍 100+ Enhanced Rules | Full-dimensional risk detection across all five databases (MySQL 18+, PG 16+, Oracle 20+, SQL Server 15+, DM8 16+) |
-| 🦞 OpenClaw Skill | Trigger a full inspection with one natural-language command — zero manual operations required |
+| 🔒 Desensitize Report | Auto-masks IP, port, username, service name in exported Word report to prevent info leakage |
 
 ---
 
@@ -352,7 +352,7 @@ python web_ui.py
 | 2 | Fill in connection info — Oracle requires service name/SID; DM8 does not need a database name |
 | 3 | Online connection testing (SYSDBA privileged verification via checkbox) |
 | 4 | Configure SSH for system resource collection (optional, default port 22; DM8 supports SSH with auto-fallback) |
-| 5 | Inspector name (default: dbcheck) |
+| 5 | Inspector name (default: dbcheck), optionally check "🔒 Desensitize Report" to mask sensitive info |
 | 6 | Confirm and execute with one click — real-time log streaming (SSE) |
 | 7 | Upon completion, preview intelligent analysis + AI diagnosis results online |
 | 8 | 📊 Historical trend analysis: view metric trends across multiple inspection runs |
