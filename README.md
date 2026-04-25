@@ -505,39 +505,39 @@ The generated Word report contains the following chapters (Oracle inspection rep
 
 ## Screenshots
 
-![Home](snapshot/webui0.png)
+![Home](snapshot/webui0-en.png)
 
-![Step 1: Select Database Type](snapshot/webui1.png)
+![Step 1: Select Database Type](snapshot/webui1-en.png)
 *Fig. 1: Select database type (MySQL 🐬 / PostgreSQL 🐘 / Oracle 🔴 / DM8 🟡)*
 
-![Step 2: Fill in Connection Info](snapshot/webui2.png)
+![Step 2: Fill in Connection Info](snapshot/webui2-en.png)
 *Fig. 2: Fill in database connection information*
 
-![Step 3: Test Connection Online](snapshot/webui3.png)
+![Step 3: Test Connection Online](snapshot/webui3-en.png)
 *Fig. 3: Online connection testing*
 
-![Step 4: SSH Configuration](snapshot/webui5.png)
+![Step 4: SSH Configuration](snapshot/webui5-en.png)
 *Fig. 4: SSH configuration (optional, default port 22)*
 
-![Step 5: Inspector Name](snapshot/webui6.png)
+![Step 5: Inspector Name](snapshot/webui6-en.png)
 *Fig. 5: Inspector name configuration (default: dbcheck)*
 
-![Step 6: Confirm Inspection Info](snapshot/webui7.png)
+![Step 6: Confirm Inspection Info](snapshot/webui7-en.png)
 *Fig. 6: Confirm inspection information*
 
-![Step 7: Run Inspection](snapshot/webui8.png)
+![Step 7: Run Inspection](snapshot/webui8-en.png)
 *Fig. 7: One-click inspection with real-time log streaming*
 
-![Report Download](snapshot/webui9.png)
+![Report Download](snapshot/webui9-en.png)
 *Fig. 8: Download Word report directly after inspection*
 
-![Historical Reports](snapshot/webui10.png)
+![Historical Reports](snapshot/webui10-en.png)
 *Fig. 9: Historical report list, browsable by name, size, and time*
 
 ![Historical Trend Analysis](snapshot/webui12.png)
 *Fig. 10: Historical trend analysis*
 
-![AI Diagnosis Configuration](snapshot/webui13.png)
+![AI Diagnosis Configuration](snapshot/webui13-en.png)
 *Fig. 11: AI diagnosis configuration — fully local, no API key needed, data never leaves your machine*
 
 ![ClawHub dbcheck Skill](snapshot/skill0.png)
@@ -546,7 +546,7 @@ The generated Word report contains the following chapters (Oracle inspection rep
 ![QClaw](snapshot/skill1.png)
 *Fig. 13: Using dbcheck in QClaw and other OpenClaw-compatible applications*
 
-![Reports](snapshot/report.png)
+![Reports](snapshot/report-en.png)
 *Fig. 14: AI diagnosis report (Markdown auto-rendered to Word format)*
 
 ---
@@ -565,6 +565,6 @@ Some features are still being actively developed and improved. Contributions and
 
 DBCheck has undergone extensive iteration and real-world testing to reach its current state. If this tool has been helpful to you, consider supporting the project's continued development:
 
-<img src="snapshot/pay.png" alt="PayPal donation QR code" width="500" />
+<img src="snapshot/pay-en.png" alt="PayPal donation QR code" width="500" />
 
 > When donating, please include your name or nickname so we know who supports us ❤️
