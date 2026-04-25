@@ -565,3 +565,5 @@ DBCheck 从初版到功能完善，历经了大量版本迭代和实测打磨。
 <img src="snapshot/pay.png" alt="PayPal 捐赠二维码" width="500" />
 
 > 捐赠时备注你的名字或昵称，让我们知道谁在支持这个项目 ❤️
+>
+> 联系邮箱：sdfiyon@gmail.com

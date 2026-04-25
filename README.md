@@ -568,3 +568,5 @@ DBCheck has undergone extensive iteration and real-world testing to reach its cu
 <img src="snapshot/pay-en.png" alt="PayPal donation QR code" width="500" />
 
 > When donating, please include your name or nickname so we know who supports us ❤️
+>
+> Contact: sdfiyon@gmail.com

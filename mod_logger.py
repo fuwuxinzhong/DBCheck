@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2024 DBCheck Contributors
+# sdfiyon@gmail.com
 #
 # This file is part of DBCheck, an open-source database health inspection tool.
 # DBCheck is released under the MIT License.
