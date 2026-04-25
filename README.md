@@ -94,7 +94,7 @@ Each risk is presented as a card: **Risk Level (High/Medium/Low) → Issue Descr
 | 📊 Historical Trend Analysis | Automatically aggregates data from multiple inspection runs on the same database, generates metric trend line charts, and compares against previous results to surface changes |
 | 🤖 AI-Powered Diagnosis | Calls local Ollama based on inspection metrics to generate personalized optimization recommendations |
 | 🔍 80+ Enhanced Rules | Full-dimensional risk detection across all four databases (MySQL 18+, PG 16+, Oracle 20+, DM8 16+) |
-| 🦞 OpenClaw Skill | Trigger a full inspection with one natural-language command — zero manual操作 required |
+| 🦞 OpenClaw Skill | Trigger a full inspection with one natural-language command — zero manual operations required |
 
 ---
 
