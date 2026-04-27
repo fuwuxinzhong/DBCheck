@@ -142,9 +142,8 @@ def _render_markdown_to_doc(doc, text, default_size=11, ch8_prefix=False):
             code_buf.append(raw_line)
             continue
 
-        # 空行
+        # 空行 → 跳过（不生成空段落，避免多余间距）
         if not line:
-            doc.add_paragraph()
             continue
 
         # 二级标题
@@ -1994,6 +1993,44 @@ class getData(object):
             print(f"AI 诊断异常: {e}")
             import traceback; traceback.print_exc()
             self.context['ai_advice'] = ''
+
+        # ── 慢查询深度分析（P2）──────────────────────────────
+        self.context['slow_query_result'] = None
+        try:
+            from slow_query_analyzer import get_slow_query_analyzer, MySQLSlowQueryAnalyzer
+            if self.conn_db2:
+                analyzer = MySQLSlowQueryAnalyzer()
+                ai_advisor = None
+                # 尝试复用已有的 AI advisor（如果启用了）
+                try:
+                    from analyzer import AIAdvisor
+                    import json as _json
+                    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai_config.json')
+                    ai_cfg = {}
+                    if os.path.exists(cfg_path):
+                        with open(cfg_path, 'r', encoding='utf-8') as f:
+                            ai_cfg = _json.load(f)
+                    ai_advisor = AIAdvisor(
+                        backend=ai_cfg.get('backend'),
+                        api_key=ai_cfg.get('api_key'),
+                        api_url=ai_cfg.get('api_url'),
+                        model=ai_cfg.get('model')
+                    )
+                except Exception:
+                    pass
+                print("\n\U0001f50d " + _t('mysql_cli_slow_query_analyzing'))
+                result = analyzer.analyze(self.conn_db2, ai_advisor=ai_advisor, lang=_MYSQL_LANG)
+                self.context['slow_query_result'] = result.to_dict()
+                if result.is_empty():
+                    print("  \u2139\ufe0f  " + _t('mysql_cli_slow_query_ps_unavailable'))
+                else:
+                    print("  \u2705  " + _t('mysql_cli_slow_query_ok').format(
+                        count=len(result.top_sql_by_latency)))
+        except ImportError:
+            # slow_query_analyzer 模块不存在时静默跳过
+            pass
+        except Exception as e:
+            print(f"\u26a0\ufe0f 慢查询深度分析失败: {e}")
 
         self.print_progress_bar(total_steps, total_steps, prefix=_t('mysql_cli_progress_prefix'), suffix=_t('mysql_cli_complete_suffix'))
         return self.context

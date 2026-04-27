@@ -227,9 +227,8 @@ def _render_markdown_to_doc(doc, text, default_size=11, ch8_prefix=False):
         if in_code_block:
             code_buf.append(stripped)
             continue
-        # 空行
+        # 空行 → 跳过（不生成空段落，避免多余间距）
         if not stripped:
-            doc.add_paragraph()
             continue
         # 二级标题
         m = re.match(r'^##\s+(.*)', stripped)
@@ -819,7 +818,7 @@ class WordTemplateGeneratorSQLServer:
         # 标题
         title = doc.add_paragraph()
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        title_run = title.add_run('SQL Server ' + 'Database Health Inspection Report')
+        title_run = title.add_run(self._t('sqlserver.report_title'))
         title_run.font.size = Pt(28)
         title_run.font.bold = True
         title_run.font.color.rgb = RGBColor(15, 75, 135)
@@ -1332,7 +1331,7 @@ class DBCheckSQLServer:
 
     def __init__(self, host, port, user, password, database=None, label=None,
                  inspector=None, ssh_host=None, ssh_user=None, ssh_password=None,
-                 ssh_key_file=None):
+                 ssh_key_file=None, desensitize=False):
         self.host = host
         self.port = port or 1433
         self.user = user
@@ -1345,6 +1344,7 @@ class DBCheckSQLServer:
         self.ssh_password = ssh_password
         self.ssh_key_file = ssh_key_file
         self.ssh_port = 22  # 默认 SSH 端口
+        self.desensitize = desensitize
 
         self.conn = None
         self.cursor = None
@@ -1689,6 +1689,41 @@ class DBCheckSQLServer:
         except Exception as e:
             print(f"AI 诊断异常: {e}")
 
+        # ── 慢查询深度分析（P2）──────────────────────────────
+        self.data['slow_query_result'] = None
+        try:
+            from slow_query_analyzer import SQLServerSlowQueryAnalyzer
+            if self.conn:
+                analyzer = SQLServerSlowQueryAnalyzer()
+                ai_advisor = None
+                try:
+                    from analyzer import AIAdvisor
+                    import json as _json
+                    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai_config.json')
+                    ai_cfg = {}
+                    if os.path.exists(cfg_path):
+                        with open(cfg_path, 'r', encoding='utf-8') as f:
+                            ai_cfg = _json.load(f)
+                    ai_advisor = AIAdvisor(
+                        backend=ai_cfg.get('backend'),
+                        api_key=ai_cfg.get('api_key'),
+                        api_url=ai_cfg.get('api_url'),
+                        model=ai_cfg.get('model')
+                    )
+                except Exception:
+                    pass
+                print("\n\U0001f50d " + _t('sqlserver.slow_query_analyzing'))
+                result = analyzer.analyze(self.conn, ai_advisor=ai_advisor, lang=self._lang)
+                self.data['slow_query_result'] = result.to_dict()
+                if result.is_empty():
+                    print("  \u2139\ufe0f  " + _t('sqlserver.slow_query_unavailable'))
+                else:
+                    print("  \u2705  " + (_t('sqlserver.slow_query_ok') % len(result.top_sql_by_latency)))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("\u26a0\ufe0f 慢查询深度分析失败: %s" % e)
+
         # 4. 生成总结
         self._generate_summary()
 
@@ -1715,7 +1750,16 @@ class DBCheckSQLServer:
         filename = f"SQLServer_{safe_label}_{timestamp}.docx"
         self.report_path = os.path.join(reports_dir, filename)
 
-        generator = WordTemplateGeneratorSQLServer(self.data)
+        # ── 脱敏处理（如开启了脱敏导出）───────────────────────
+        report_data = self.data
+        if self.desensitize:
+            try:
+                from desensitize import apply_desensitization
+                report_data = apply_desensitization(dict(self.data))
+            except Exception:
+                pass
+
+        generator = WordTemplateGeneratorSQLServer(report_data)
         generator.generate(self.report_path)
 
 

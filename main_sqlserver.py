@@ -227,9 +227,8 @@ def _render_markdown_to_doc(doc, text, default_size=11, ch8_prefix=False):
         if in_code_block:
             code_buf.append(stripped)
             continue
-        # 空行
+        # 空行 → 跳过（不生成空段落，避免多余间距）
         if not stripped:
-            doc.add_paragraph()
             continue
         # 二级标题
         m = re.match(r'^##\s+(.*)', stripped)
@@ -1689,6 +1688,41 @@ class DBCheckSQLServer:
                 self.data['ai_advice'] = ai_advice
         except Exception as e:
             print(f"AI 诊断异常: {e}")
+
+        # ── 慢查询深度分析（P2）──────────────────────────────
+        self.data['slow_query_result'] = None
+        try:
+            from slow_query_analyzer import SQLServerSlowQueryAnalyzer
+            if self.conn:
+                analyzer = SQLServerSlowQueryAnalyzer()
+                ai_advisor = None
+                try:
+                    from analyzer import AIAdvisor
+                    import json as _json
+                    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai_config.json')
+                    ai_cfg = {}
+                    if os.path.exists(cfg_path):
+                        with open(cfg_path, 'r', encoding='utf-8') as f:
+                            ai_cfg = _json.load(f)
+                    ai_advisor = AIAdvisor(
+                        backend=ai_cfg.get('backend'),
+                        api_key=ai_cfg.get('api_key'),
+                        api_url=ai_cfg.get('api_url'),
+                        model=ai_cfg.get('model')
+                    )
+                except Exception:
+                    pass
+                print("\n\U0001f50d " + _t('sqlserver.slow_query_analyzing'))
+                result = analyzer.analyze(self.conn, ai_advisor=ai_advisor, lang=self._lang)
+                self.data['slow_query_result'] = result.to_dict()
+                if result.is_empty():
+                    print("  \u2139\ufe0f  " + _t('sqlserver.slow_query_unavailable'))
+                else:
+                    print("  \u2705  " + (_t('sqlserver.slow_query_ok') % len(result.top_sql_by_latency)))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("\u26a0\ufe0f 慢查询深度分析失败: %s" % e)
 
         # 4. 生成总结
         self._generate_summary()

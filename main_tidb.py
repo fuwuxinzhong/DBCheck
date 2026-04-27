@@ -142,9 +142,8 @@ def _render_markdown_to_doc(doc, text, default_size=11, ch8_prefix=False):
             code_buf.append(raw_line)
             continue
 
-        # 空行
+        # 空行 → 跳过（不生成空段落，避免多余间距）
         if not line:
-            doc.add_paragraph()
             continue
 
         # 二级标题

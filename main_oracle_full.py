@@ -2629,6 +2629,34 @@ def single_inspection(args):
             ai_advice = f"⚠ {_t('oracle_log_ai_fail')}: {err_str[:120]}"
         print(f"  {ai_advice}")
 
+    # ── 4.6 慢查询深度分析（P2）────────────────────────────────────────────
+    slow_query_result = None
+    try:
+        from slow_query_analyzer import OracleSlowQueryAnalyzer
+        analyzer = OracleSlowQueryAnalyzer()
+        ai_advisor = None
+        try:
+            from analyzer import AIAdvisor
+            ai_advisor = AIAdvisor(
+                backend=ai_cfg.get('backend'),
+                api_key=ai_cfg.get('api_key'),
+                api_url=ai_cfg.get('api_url'),
+                model=ai_cfg.get('model')
+            )
+        except Exception:
+            pass
+        print(f"\n[{GREEN}4.6/6{RESET}] {_t('oracle_log_slow_query')}")
+        result = analyzer.analyze(conn, ai_advisor=ai_advisor, lang=_lang)
+        slow_query_result = result.to_dict()
+        if result.is_empty():
+            print(f"  \u2139\ufe0f  {_t('oracle_log_slow_query_empty')}")
+        else:
+            print(f"  \u2705  {_t('oracle_log_slow_query_ok').format(count=len(result.top_sql_by_latency))}")
+    except ImportError:
+        print(f"  \u26a0  slow_query_analyzer 模块未找到，跳过慢查询深度分析")
+    except Exception as e:
+        print(f"  \u26a0  慢查询深度分析失败: {e}")
+
     # ── 5. 生成报告 ────────────────────────────────────────────────────────
     print(f"\n[{GREEN}5/6{RESET}] {_t('oracle_log_gen_report')}")
     # 从 check_results 提取 db_info

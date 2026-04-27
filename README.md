@@ -98,7 +98,7 @@ Each risk is presented as a card: **Risk Level (High/Medium/Low) → Issue Descr
 |-----------|-------------|
 | 📊 Historical Trend Analysis | Automatically aggregates data from multiple inspection runs on the same database, generates metric trend line charts, and compares against previous results to surface changes |
 | 🤖 AI-Powered Diagnosis | Calls local Ollama based on inspection metrics to generate personalized optimization recommendations |
-| 🔍 100+ Enhanced Rules | Full-dimensional risk detection across six databases (MySQL 18+, PG 16+, Oracle 20+, SQL Server 15+, DM8 16+, TiDB 18+) |
+| 🔍 130+ Enhanced Rules | Full-dimensional risk detection across six databases (MySQL 35+, PG 27+, Oracle 20+, SQL Server 15+, DM8 16+, TiDB 18+) — including 28 new slow query deep analysis rules |
 | 🔒 Desensitize Report | Auto-masks IP, port, username, service name in exported Word report to prevent info leakage |
 
 ---
@@ -275,6 +275,70 @@ Comparison of Intelligent Analysis vs. AI Diagnosis:
 
 > For security reasons, any non-localhost API address is automatically rejected by the code to prevent data leakage.
 
+### Slow Query Deep Analysis 🔍
+
+> Beyond basic slow query detection, DBCheck performs multi-dimensional deep analysis — correlating execution plans, I/O patterns, lock waits, and temporary table usage — then feeds the results directly into AI diagnostics for intelligent root cause analysis.
+
+#### What It Does
+
+When a database exhibits slow query symptoms, DBCheck collects the Top N worst-performing queries across multiple performance dimensions, performs automated risk rule analysis, and then invokes the AI advisor to generate targeted optimization recommendations.
+
+#### Data Collection Dimensions
+
+Each database has its own optimized query for capturing the most expensive statements:
+
+| Database | Data Source | Collection Dimensions |
+|----------|-------------|------------------------|
+| **MySQL** | `performance_schema.events_statements_summary_by_digest` | Execution latency, full table scans, lock waits, temporary tables, sort operations |
+| **PostgreSQL** | `pg_stat_statements` | Total time, avg time, I/O time, temp blocks, current long-running queries |
+| **Oracle** | `v$sql` | Buffer Gets, Disk Reads, Elapsed Time |
+| **SQL Server** | `sys.dm_exec_query_stats` | CPU usage, logical reads, elapsed time, physical reads |
+| **DM8** | `V$SQL` | Execution time, disk reads |
+| **TiDB** | `information_schema.cluster_slow_query` | Query time, memory usage, scan rows, Coprocessor tasks |
+
+#### Integration with Inspection Flow
+
+```
+checkdb() execution order:
+1. getData() → SQL inspection queries
+2. checkdb() → Intelligent risk analysis
+3. Slow Query Deep Analysis ← NEW (auto-executed after AI diagnosis)
+4. context['slow_query_result'] → smart_analyze_* for risk rule evaluation
+5. AI Advisor → injects slow_query_top3 + slow_query_count metrics
+```
+
+The `SlowQueryResult` container standardizes the output from all database analyzers, ensuring consistent downstream processing regardless of database type.
+
+#### Enhanced Risk Rules
+
+The inspection engine adds database-specific slow query rules:
+
+**MySQL (new rules 17+):**
+- `performance_schema` not enabled
+- Full table scan detection
+- Lock wait ratio threshold
+- AI diagnosis injection of slow query findings
+
+**PostgreSQL (new rules 11+):**
+- `pg_stat_statements` extension not enabled
+- High-latency query detection
+- High I/O query detection
+- Long-running query threshold
+- AI diagnosis injection of slow query findings
+
+#### AI Diagnosis Enhancement
+
+A dedicated `build_slow_query_ai_prompt()` function generates a targeted diagnostic prompt. The AI advisor receives:
+
+- **slow_query_top3**: The three most impactful slow queries (by latency, I/O, or execution frequency)
+- **slow_query_count**: Total number of slow queries captured
+
+This enables the AI to provide precise, query-level optimization advice rather than generic recommendations.
+
+#### Output in Report
+
+Slow query analysis results appear in the report's risk chapter, tagged with severity levels (🔴 High / 🟡 Medium / 🟢 Low) and paired with actionable remediation SQL.
+
 ---
 
 ## Environment Requirements
@@ -296,8 +360,14 @@ Comparison of Intelligent Analysis vs. AI Diagnosis:
 ### Installing Dependencies
 
 ```bash
-pip install pymysql psycopg2-binary paramiko=4.0.0 openpyxl docxtpl python-docx pandas psutil flask oracledb dmpython pyodbc flask_socketio
+pip install -r requirements.txt
 ```
+
+> 💡 **Database Driver Notes:**
+>
+> - **Oracle**: `oracledb` (recommended, pure Python, no Instant Client needed)
+> - **DM8**: `dmpython` (Dameng official driver)
+> - **SQL Server**: Requires [ODBC Driver 17](https://docs.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server) installed separately
 
 > DM8 Driver Notes:
 > - `dmpython`: Pure Python driver provided by Dameng (pip install dmpython), recommended
@@ -425,8 +495,9 @@ dbcheck/skill/dbcheck/
     ├── main_oracle_full.py     # Oracle inspection logic (20+ checks)
     ├── main_sqlserver.py       # SQL Server inspection logic
     ├── main_dm.py              # Dameng DM8 inspection logic
-    ├── analyzer.py             # Intelligent risk analysis engine
     ├── main_tidb.py             # TiDB inspection logic
+    ├── analyzer.py             # Intelligent risk analysis engine
+    ├── slow_query_analyzer.py   # Slow query deep analysis engine (MySQL/PG/Oracle/SQLServer/DM8)
     └── main.py                 # Unified menu entry
 ```
 

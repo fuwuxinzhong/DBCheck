@@ -1699,7 +1699,7 @@ def _docx_table(doc, headers, rows, header_bg='336699'):
     return tbl
 
 
-def build_word_report(db_info, os_data, check_results, db_version, ai_advice='', inspector='', lang='zh'):
+def build_word_report(db_info, os_data, check_results, db_version, ai_advice='', inspector='', lang='zh', desensitize=False):
     """构建完整 Word 巡检报告（纯 python-docx，无模板依赖）"""
     if not _HAS_DOCX:
         return None
@@ -1710,6 +1710,16 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
             return t(key, lang)
         except Exception:
             return key
+
+    # ── 脱敏处理（IP / 端口 / 用户名 / 服务名 / 主机名）───────────
+    if desensitize:
+        try:
+            from desensitize import apply_desensitization
+            _ds = apply_desensitization
+            db_info = _ds({'db_info': db_info})['db_info']
+            os_data  = _ds({'system_info': os_data})['system_info']
+        except Exception:
+            pass
 
     doc = Document()
 
@@ -2619,6 +2629,34 @@ def single_inspection(args):
             ai_advice = f"⚠ {_t('oracle_log_ai_fail')}: {err_str[:120]}"
         print(f"  {ai_advice}")
 
+    # ── 4.6 慢查询深度分析（P2）────────────────────────────────────────────
+    slow_query_result = None
+    try:
+        from slow_query_analyzer import OracleSlowQueryAnalyzer
+        analyzer = OracleSlowQueryAnalyzer()
+        ai_advisor = None
+        try:
+            from analyzer import AIAdvisor
+            ai_advisor = AIAdvisor(
+                backend=ai_cfg.get('backend'),
+                api_key=ai_cfg.get('api_key'),
+                api_url=ai_cfg.get('api_url'),
+                model=ai_cfg.get('model')
+            )
+        except Exception:
+            pass
+        print(f"\n[{GREEN}4.6/6{RESET}] {_t('oracle_log_slow_query')}")
+        result = analyzer.analyze(conn, ai_advisor=ai_advisor, lang=_lang)
+        slow_query_result = result.to_dict()
+        if result.is_empty():
+            print(f"  \u2139\ufe0f  {_t('oracle_log_slow_query_empty')}")
+        else:
+            print(f"  \u2705  {_t('oracle_log_slow_query_ok').format(count=len(result.top_sql_by_latency))}")
+    except ImportError:
+        print(f"  \u26a0  slow_query_analyzer 模块未找到，跳过慢查询深度分析")
+    except Exception as e:
+        print(f"  \u26a0  慢查询深度分析失败: {e}")
+
     # ── 5. 生成报告 ────────────────────────────────────────────────────────
     print(f"\n[{GREEN}5/6{RESET}] {_t('oracle_log_gen_report')}")
     # 从 check_results 提取 db_info
@@ -2643,7 +2681,8 @@ def single_inspection(args):
         db_info['STATUS']         = inst_rows[0][5]
 
     docx = build_word_report(db_info, os_data, check_results, version_str, ai_advice,
-                              inspector=args.inspector or 'dbcheck', lang=_lang)
+                              inspector=args.inspector or 'dbcheck', lang=_lang,
+                              desensitize=bool(getattr(args, 'desensitize', False)))
 
     # ── 6. 保存报告 ────────────────────────────────────────────────────────
     print(f"\n[{GREEN}6/6{RESET}] {_t('oracle_log_save_report')}")
@@ -2656,7 +2695,8 @@ def single_inspection(args):
 
     # Word
     if docx:
-        docx_fname = f"oracle_fullcheck_{db_name}_{ver_tag}_{ts}.docx"
+        fname_template = _t('webui.oracle_report_filename')
+        docx_fname = fname_template.format(name=db_name, ts=ts)
         docx_path  = os.path.join(output_dir, docx_fname)
         try:
             docx.save(docx_path)

@@ -720,10 +720,15 @@ EN = {
     "report.pg_issue_superuser_many": "Too Many Superusers",
     "report.pg_issue_disk_warning": "Disk Space Warning",
     "report.pg_issue_dead_tuples": "Excessive Dead Tuples",
+    "report.pg_issue_pg_stat_statements_off": "pg_stat_statements extension not enabled",
+    "report.pg_issue_slow_query_high_latency": "Top SQL total latency is high",
+    "report.pg_issue_slow_query_high_io": "High IO SQL queries detected",
+    "report.pg_issue_long_running_sql": "Long-running queries in progress",
     "report.pg_fallback_priority_mid": "Medium",
     "report.pg_fallback_priority_low": "Low",
     "report.pg_fallback_owner_dba": "DBA",
     "report.pg_fallback_owner_sysadmin": "System Administrator",
+
 
     "report.oracle_title": "DBCheck Oracle Full Inspection Report",
     "report.inspector_label": "\nInspector: {i}",
@@ -1126,6 +1131,9 @@ EN = {
     "oracle_log_item_skip": "Skipped",
     "oracle_log_ai_diagnosis": "AI Diagnosis...",
     "oracle_log_ai_calling": "Calling AI diagnosis",
+    "oracle_log_slow_query": "Slow Query Deep Analysis...",
+    "oracle_log_slow_query_ok": "Slow query analysis complete, collected {count} Top SQL records",
+    "oracle_log_slow_query_empty": "v$sql view unavailable or empty, skipping",
     "oracle_log_ai_ok": "AI diagnosis completed",
     "oracle_log_ai_empty": "AI diagnosis returned empty",
     "oracle_log_ai_disabled": "AI diagnosis disabled",
@@ -1179,6 +1187,9 @@ EN = {
     "oracle_check_item_alert": "Alert Log",
 
     "mysql_cli_ai_calling": "Calling AI diagnosis ({backend} / {model})...",
+    "mysql_cli_slow_query_analyzing": "Running slow query deep analysis...",
+    "mysql_cli_slow_query_ok": "Slow query analysis complete, collected {count} Top SQL records",
+    "mysql_cli_slow_query_ps_unavailable": "performance_schema not enabled or no slow query data, skipping",
     "mysql_cli_back_menu": "Return to main menu? (y/n) [y]: ",
     "mysql_cli_banner": "DBCheck - MySQL Database Inspection Tool",
     "mysql_cli_batch_done": "Batch Inspection Complete",
@@ -1275,6 +1286,9 @@ EN = {
     "mysql_cli_local_disk_fail": "Failed to get disk info: {e}",
     "mysql_cli_host_disk_fail": "Failed to get disk usage: {e}",
     "pg_cli_ai_calling": "Calling AI diagnosis ({backend} / {model})...",
+    "pg_cli_slow_query_analyzing": "Running slow query deep analysis...",
+    "pg_cli_slow_query_ok": "Slow query analysis complete, collected {count} Top SQL records",
+    "pg_cli_slow_query_pg_stat_unavailable": "pg_stat_statements not enabled, skipping (run CREATE EXTENSION pg_stat_statements)",
     "pg_cli_back_menu": "Return to main menu? (y/n) [y]: ",
     "pg_cli_banner": "DBCheck - PostgreSQL Database Inspection Tool",
     "pg_cli_banner_title": "DBCheck - PostgreSQL Database Inspection Tool",
@@ -1414,6 +1428,9 @@ EN = {
     "dm8_warn_db_err": "[WARN]  [{item}] Database error ({code}): {e}",
     "dm8_warn_exc": "[WARN]  [{item}] {type}: {e}",
     "dm8_ai_calling": "\n🤖 Calling AI diagnosis ({backend} / {model})...",
+    "dm8_slow_query_analyzing": "Running slow query deep analysis...",
+    "dm8_slow_query_ok": "Slow query analysis complete, collected {count} Top SQL records",
+    "dm8_slow_query_unavailable": "V$SQL view not available, skipping deep analysis",
     "dm8_starting": "Starting DM8 inspection...",
     "dm8_alt_render_fail": "Fallback rendering also failed: {e}",
     # DM8 progress bar i18n
@@ -1530,6 +1547,10 @@ EN = {
     "sqlserver_remote_disk_fail": "[FAIL] SSH disk info collection failed: %s",
     # AI diagnosis
     "sqlserver.ai_calling": "Calling AI diagnosis (%s / %s)...",
+    "sqlserver.slow_query_analyzing": "Running slow query deep analysis...",
+    "sqlserver.slow_query_ok": "Slow query analysis complete, collected %d Top SQL records",
+    "sqlserver.slow_query_unavailable": "dm_exec_query_stats not available, skipping",
+
 
     # SQL Server CLI interactive menu
     "sqlserver_cli_banner": "DBCheck - SQL Server Inspection Tool",

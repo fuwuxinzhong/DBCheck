@@ -98,7 +98,7 @@ python main.py --lang zh         # 切换为中文（显式指定）
 |------|------|
 | 📊 历史趋势分析 | 同一数据库多次巡检数据自动汇聚，生成指标趋势折线图，与上次对比发现变化 |
 | 🤖 AI 智能诊断 | 基于巡检指标调用本地 Ollama，生成个性化优化建议 |
-| 🔍 100+ 条增强规则 | 覆盖六种数据库全维度风险检测（MySQL 18+条 / PG 16+条 / Oracle 20+条 / SQL Server 15+条 / DM8 16+条 / TiDB 18+条） |
+| 🔍 130+ 条增强规则 | 覆盖六种数据库全维度风险检测（MySQL 35+条 / PG 27+条 / Oracle 20+条 / SQL Server 15+条 / DM8 16+条 / TiDB 18+条）——含新增 28 条慢查询深度分析规则 |
 | 🔒 脱敏导出报告 | 导出 Word 报告时自动掩码 IP、端口、用户名、服务名等敏感信息，防止信息泄露 |
 
 ---
@@ -275,6 +275,70 @@ AI 诊断与智能分析的关系：
 
 > ⚠️ 出于安全考虑，非 localhost 的 API 地址会被代码自动拒绝，防止敏感数据外传。
 
+### 慢查询深度分析 🔍
+
+> 不仅检测慢查询，DBCheck 还从执行计划、I/O 模式、锁等待、临时表使用等多个维度进行深度剖析，并将结果注入 AI 诊断，生成精准的根因分析优化建议。
+
+#### 功能概述
+
+当数据库出现慢查询症状时，DBCheck 会跨多个性能维度采集 Top N 最差性能语句，执行自动化风险规则分析，然后调用 AI advisor 生成针对性的优化建议。
+
+#### 各数据库采集维度
+
+每种数据库都有针对其性能模型优化的查询语句：
+
+| 数据库 | 数据来源 | 采集维度 |
+|--------|----------|----------|
+| **MySQL** | `performance_schema.events_statements_summary_by_digest` | 执行延迟、全表扫描、锁等待、临时表、排序操作 |
+| **PostgreSQL** | `pg_stat_statements` | 总时间、平均时间、I/O 时间、临时块、当前长查询 |
+| **Oracle** | `v$sql` | Buffer Gets、Disk Reads、Elapsed Time（解析时间+执行时间）|
+| **SQL Server** | `sys.dm_exec_query_stats` | CPU 使用率、逻辑读、Elapsed Time、物理读 |
+| **DM8** | `V$SQL` | 执行时间、磁盘读 |
+| **TiDB** | `information_schema.cluster_slow_query` | 查询时间、内存使用量、扫描行数、Coprocessor 任务数 |
+
+#### 与巡检流程的集成
+
+```
+checkdb() 执行顺序：
+1. getData() → 执行 SQL 巡检查询
+2. checkdb() → 智能风险分析
+3. 慢查询深度分析 ← 新增（AI 诊断之后自动执行）
+4. context['slow_query_result'] → smart_analyze_* 执行风险规则评估
+5. AI Advisor → 注入 slow_query_top3 + slow_query_count 指标
+```
+
+`SlowQueryResult` 标准化容器统一了各数据库分析器的输出格式，确保下游处理逻辑与数据库类型无关。
+
+#### 增强的风险规则
+
+巡检引擎新增了针对慢查询的数据库特定规则：
+
+**MySQL（新增规则 17+ 条）：**
+- `performance_schema` 未开启检测
+- 全表扫描语句检测
+- 锁等待比例阈值检测
+- AI 诊断注入慢查询发现结果
+
+**PostgreSQL（新增规则 11+ 条）：**
+- `pg_stat_statements` 扩展未开启检测
+- 高延迟语句检测
+- 高 I/O 语句检测
+- 长查询阈值检测
+- AI 诊断注入慢查询发现结果
+
+#### AI 诊断增强
+
+`build_slow_query_ai_prompt()` 函数生成专项诊断 Prompt，AI advisor 接收到：
+
+- **slow_query_top3**：影响最大的三条慢查询（按延迟/I/O/执行频率排序）
+- **slow_query_count**：采集到的慢查询总数
+
+使 AI 能够提供精确到单条语句的优化建议，而非泛泛而谈。
+
+#### 报告中的呈现
+
+慢查询分析结果以风险卡片形式出现在报告的风险建议章节，每条风险标注严重等级（🔴 高危 / 🟡 中危 / 🟢 低危），并附带可直接执行的修复 SQL。
+
 ---
 
 ## 环境要求
@@ -297,17 +361,14 @@ AI 诊断与智能分析的关系：
 ### 安装依赖
 
 ```bash
-pip install pymysql psycopg2-binary paramiko=4.0.0 openpyxl docxtpl python-docx pandas psutil flask oracledb dmpython pyodbc flask_socketio
-
-> 💡 DM8 驱动安装提示：
-> - `dmpython`：达梦官方提供的纯 Python 驱动（pip install dmpython），推荐使用
-> - 连接参数说明：主机 + 端口（默认 5236）+ 用户名（无 database 参数，用户即 Schema）
-> - DM8 的 V$ 视图列名与 Oracle 有较大差异，工具已做针对性适配
+pip install -r requirements.txt
 ```
 
-> 💡 Oracle 驱动安装提示：
-> - `oracledb`：纯 Python 实现，无需 Instant Client，推荐使用
-> - `cx_Oracle`：需要额外下载 [Oracle Instant Client](https://www.oracle.com/database/technologies/instant-client.html) 并配置环境变量
+> 💡 **数据库驱动说明：**
+>
+> - **Oracle**：`oracledb`（推荐，纯 Python 实现，无需 Instant Client）
+> - **DM8**：`dmpython`（达梦官方驱动）
+> - **SQL Server**：需额外安装 [ODBC Driver 17](https://docs.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server)
 
 ---
 
@@ -428,6 +489,7 @@ dbcheck/skill/dbcheck/
     ├── main_dm.py         # 达梦 DM8 巡检逻辑
     ├── main_tidb.py        # TiDB 巡检逻辑
     ├── analyzer.py        # 智能风险分析引擎
+    ├── slow_query_analyzer.py  # 慢查询深度分析引擎（MySQL/PG/Oracle/SQLServer/DM8）
     └── main.py             # 统一菜单入口
 ```
 

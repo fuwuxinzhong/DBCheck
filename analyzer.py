@@ -301,6 +301,68 @@ def smart_analyze_mysql(context: dict) -> list:
             'fix_sql': "-- 修改 my.cnf：\n-- character-set-server = utf8mb4\n-- collation-server = utf8mb4_unicode_ci"
         })
 
+    # ── 17. 慢查询深度分析（P2）─────────────────────────────
+    # 利用 performance_schema.events_statements_summary_by_digest 数据
+    sq_result = context.get('slow_query_result', {})
+    if sq_result:
+        ext_available = sq_result.get('extension_available', {})
+        # performance_schema 未开启时给出建议
+        if not ext_available.get('performance_schema', False):
+            issues.append({
+                'col1': 'performance_schema 未开启', 'col2': '建议',
+                'col3': 'performance_schema 未开启，无法进行慢查询深度分析。建议在 my.cnf 中添加 performance_schema=ON 并重启',
+                'col4': '低', 'col5': 'DBA',
+                'fix_sql': '-- 在 my.cnf 中添加后重启：\n-- performance_schema=ON\n-- 或在线启用（部分参数）：\n-- SET GLOBAL performance_schema_events_statements_history_size = 10000;'
+            })
+
+        top_latency = sq_result.get('top_sql_by_latency', [])
+        full_scan = sq_result.get('full_table_scan_sql', [])
+        top_lock = sq_result.get('top_sql_by_lock', [])
+
+        # Top SQL 整体延迟偏高
+        if top_latency:
+            max_latency = max((float(x.get('total_time_sec') or 0) for x in top_latency), default=0)
+            if max_latency > 300:  # > 5 分钟总延迟
+                issues.append({
+                    'col1': 'Top SQL 总体延迟偏高', 'col2': '高风险',
+                    'col3': f'Top SQL 最高累计延迟 {max_latency:.1f} 秒，需重点关注最慢的查询',
+                    'col4': '高', 'col5': 'DBA',
+                    'fix_sql': '-- 查看最慢的 SQL：\n-- SELECT * FROM performance_schema.events_statements_summary_by_digest\n--   ORDER BY SUM_TIMER_WAIT DESC LIMIT 10;'
+                })
+
+        # 全表扫描 SQL
+        if full_scan:
+            scan_count = len(full_scan)
+            worst = full_scan[0] if full_scan else {}
+            issues.append({
+                'col1': f'发现 {scan_count} 条全表扫描 SQL', 'col2': '高风险',
+                'col3': f'最严重 SQL 扫描了 {worst.get("rows_scanned", 0)} 行但只返回 {worst.get("rows_sent", 0)} 行，过滤率 {(1 - float(worst.get("rows_sent", 1) / max(worst.get("rows_scanned", 1), 1)))*100:.1f}%，建议添加合适索引',
+                'col4': '高', 'col5': 'DBA',
+                'fix_sql': '-- 查看全表扫描 SQL：\nSELECT DIGEST_TEXT, COUNT_STAR, SUM_ROWS_EXAMINED, SUM_ROWS_SENT\nFROM performance_schema.events_statements_summary_by_digest\nWHERE DIGEST_TEXT IS NOT NULL\nORDER BY SUM_ROWS_EXAMINED DESC LIMIT 10;\n-- 建议：分析 SQL 添加合适索引，或使用 STRAIGHT_JOIN / FORCE INDEX 强制使用索引'
+            })
+
+        # 锁等待严重
+        if top_lock:
+            lock_count = len(top_lock)
+            worst_lock = top_lock[0] if top_lock else {}
+            issues.append({
+                'col1': f'发现 {lock_count} 条高锁等待 SQL', 'col2': '中风险',
+                'col3': f'最严重 SQL 累计锁等待 {worst_lock.get("total_lock_sec", 0):.3f} 秒，建议检查锁竞争',
+                'col4': '中', 'col5': 'DBA',
+                'fix_sql': '-- 查看锁等待：\nSELECT * FROM performance_schema.events_statements_summary_by_digest\n  WHERE SUM_LOCK_TIME > 0\n  ORDER BY SUM_LOCK_TIME DESC LIMIT 10;\n-- 结合 PROCESSLIST 确认阻塞源：\n-- SHOW FULL PROCESSLIST;'
+            })
+
+        # AI 诊断结果（如有）
+        ai_diag = sq_result.get('ai_diagnosis', '')
+        if ai_diag:
+            # 将 AI 诊断结果注入到 issues 中（标记为 AI 生成）
+            issues.append({
+                'col1': 'AI 慢查询诊断', 'col2': 'AI 建议',
+                'col3': ai_diag[:500],  # 限制长度避免过长
+                'col4': '参考', 'col5': 'AI (Ollama)',
+                'fix_sql': ''
+            })
+
     return issues
 
 
@@ -478,6 +540,59 @@ def smart_analyze_pg(context: dict) -> list:
                 'col3': f'数据库 {dbname} dead tuples 占比 {dead/(live+dead)*100:.1f}%，建议执行 VACUUM',
                 'col4': 'report.pg_fallback_priority_mid', 'col5': 'report.pg_fallback_owner_dba',
                 'fix_sql': f"VACUUM ANALYZE {dbname};\n-- 或全库：\nVACUUM VERBOSE ANALYZE;"
+            })
+
+    # ── 11. 慢查询深度分析（P2）─────────────────────────────
+    sq_result = context.get('slow_query_result', {})
+    if sq_result:
+        ext_available = sq_result.get('extension_available', {})
+        if not ext_available.get('pg_stat_statements', False):
+            issues.append({
+                'col1': 'report.pg_issue_pg_stat_statements_off', 'col2': 'report.risk_suggest',
+                'col3': 'pg_stat_statements 扩展未开启，无法进行慢查询深度分析',
+                'col4': 'report.pg_fallback_priority_low', 'col5': 'report.pg_fallback_owner_dba',
+                'fix_sql': "-- 在 postgresql.conf 中添加并重启：\n-- shared_preload_libraries = \'pg_stat_statements\'\n-- pg_stat_statements.track = all\n-- 然后执行：CREATE EXTENSION pg_stat_statements;"
+            })
+
+        top_latency = sq_result.get('top_sql_by_latency', [])
+        top_io = sq_result.get('top_sql_by_io', [])
+        long_running = sq_result.get('slow_queries_current', [])
+
+        if top_latency:
+            max_latency = max((float(x.get('total_time_sec') or 0) for x in top_latency), default=0)
+            if max_latency > 300:
+                issues.append({
+                    'col1': 'report.pg_issue_slow_query_high_latency', 'col2': 'report.risk_high',
+                    'col3': f'Top SQL 最高累计延迟 {max_latency:.1f} 秒，需重点关注',
+                    'col4': 'report.pg_fallback_priority_high', 'col5': 'report.pg_fallback_owner_dba',
+                    'fix_sql': "-- 查看最慢 SQL：\nSELECT query, calls, total_exec_time / 1000 AS total_sec,\n       mean_exec_time / 1000 AS mean_sec, rows\nFROM pg_stat_statements\nORDER BY total_exec_time DESC LIMIT 10;"
+                })
+
+        if top_io:
+            high_io_count = len(top_io)
+            worst_io = top_io[0] if top_io else {}
+            issues.append({
+                'col1': 'report.pg_issue_slow_query_high_io', 'col2': 'report.risk_high',
+                'col3': f'发现 {high_io_count} 条高 IO SQL，最严重的读取了 {worst_io.get("rows_read", 0)} 个块',
+                'col4': 'report.pg_fallback_priority_high', 'col5': 'report.pg_fallback_owner_dba',
+                'fix_sql': "-- 查看高 IO SQL：\nSELECT query, calls, blk_read_time / 1000 AS read_ms,\n       blk_write_time / 1000 AS write_ms, shared_blks_read, shared_blks_written\nFROM pg_stat_statements\nWHERE (blk_read_time + blk_write_time) > 0\nORDER BY (blk_read_time + blk_write_time) DESC LIMIT 10;"
+            })
+
+        if long_running:
+            issues.append({
+                'col1': 'report.pg_issue_long_running_sql', 'col2': 'report.risk_high',
+                'col3': f'当前有 {len(long_running)} 个长查询正在执行，最长等待锁或执行中',
+                'col4': 'report.pg_fallback_priority_high', 'col5': 'report.pg_fallback_owner_dba',
+                'fix_sql': "-- 查看长查询：\nSELECT pid, now()-query_start AS duration, state, left(query,100)\nFROM pg_stat_activity\nWHERE state != \'idle\' AND (now()-query_start) > interval \'5 seconds\'\nORDER BY duration DESC;\n-- 杀掉问题查询：\n-- SELECT pg_terminate_backend(pid);"
+            })
+
+        ai_diag = sq_result.get('ai_diagnosis', '')
+        if ai_diag:
+            issues.append({
+                'col1': 'AI 慢查询诊断', 'col2': 'AI 建议',
+                'col3': ai_diag[:500],
+                'col4': '参考', 'col5': 'AI (Ollama)',
+                'fix_sql': ''
             })
 
     return issues
@@ -957,6 +1072,9 @@ class AIAdvisor:
         'wait_type': '等待类型',
         'wait_time_ms': '等待时间(毫秒)',
         'waiting_tasks_count': '等待任务数',
+        # ── 慢查询深度分析（P2）─────────────────────────────────
+        'slow_query_top3': '慢查询 Top 3',
+        'slow_query_count': '慢查询样本数',
     }
 
     METRIC_LABELS_EN = {
@@ -983,6 +1101,9 @@ class AIAdvisor:
         'wait_type': 'Wait Type',
         'wait_time_ms': 'Wait Time (ms)',
         'waiting_tasks_count': 'Waiting Tasks Count',
+        # ── Slow Query Deep Analysis (P2) ─────────────────────────
+        'slow_query_top3': 'Slow Query Top 3',
+        'slow_query_count': 'Slow Query Sample Count',
     }
 
     def __init__(self, backend: str = None, api_key: str = None,
@@ -1032,6 +1153,14 @@ class AIAdvisor:
 
         # Oracle 专属详细信息节（由 main_oracle_full.py 预构建）
         oracle_extra = ""
+        # 慢查询深度分析节（MySQL/PG P2）
+        slow_query_extra = ""
+        if 'slow_query_top3' in metrics and metrics['slow_query_top3']:
+            sq_val = metrics['slow_query_top3']
+            if lang == 'zh':
+                slow_query_extra += f"\n【慢查询 Top 3】\n{sq_val}"
+            else:
+                slow_query_extra += f"\n[Slow Query Top 3]\n{sq_val}"
         if lang == 'zh':
             if 'wait_events_top5' in metrics and metrics['wait_events_top5'] not in ('N/A', None, ''):
                 oracle_extra += f"\n【等待事件 Top5】\n{metrics['wait_events_top5']}"
@@ -1061,6 +1190,7 @@ class AIAdvisor:
 {sep}
 {chr(10).join(issue_lines) or '  未发现明显风险项'}
 
+{slow_query_extra if slow_query_extra else ''}
 {oracle_extra if oracle_extra else ''}
 {sep}
 【三、诊断要求】
@@ -1100,6 +1230,7 @@ class AIAdvisor:
 {sep}
 {chr(10).join(issue_lines) or '  No significant risks found.'}
 
+{slow_query_extra if slow_query_extra else ''}
 {oracle_extra if oracle_extra else ''}
 {sep}
 [III. Diagnosis Requirements]
@@ -1164,6 +1295,18 @@ Format requirement (output Markdown directly, no prefixes like "Here are"):
             if db_type == 'mysql':
                 metrics['connections'] = context.get('threads_connected', [{}])[0].get('Value', 0) if context.get('threads_connected') else 0
                 metrics['max_connections'] = context.get('max_connections', [{}])[0].get('Value', 0) if context.get('max_connections') else 0
+                # MySQL 慢查询深度分析指标（P2）
+                sq = context.get('slow_query_result', {})
+                if sq and sq.get('top_sql_by_latency'):
+                    top3 = sq['top_sql_by_latency'][:3]
+                    metrics['slow_query_top3'] = '\n'.join([
+                        f"  - latency={x.get('total_time_sec', 0):.3f}s, "
+                        f"exec={x.get('exec_count', 0)}, "
+                        f"scan={x.get('rows_scanned', 0)}, "
+                        f"sql={x.get('query_text', '')[:100]}"
+                        for x in top3
+                    ])
+                    metrics['slow_query_count'] = len(sq.get('top_sql_by_latency', []))
             elif db_type == 'sqlserver':
                 # SQL Server 连接统计
                 conn_data = context.get('connections', [])
@@ -1191,6 +1334,18 @@ Format requirement (output Markdown directly, no prefixes like "Here are"):
                     metrics['connections'] = pg_conn[0].get('used_connections', 0)
                     metrics['max_connections'] = pg_conn[0].get('max_connections', 0)
                     metrics['cache_hit_ratio'] = context.get('pg_cache_hit', [{}])[0].get('cache_hit_ratio', 0) if context.get('pg_cache_hit') else 0
+                # PostgreSQL 慢查询深度分析指标（P2）
+                sq = context.get('slow_query_result', {})
+                if sq and sq.get('top_sql_by_latency'):
+                    top3 = sq['top_sql_by_latency'][:3]
+                    metrics['slow_query_top3'] = '\n'.join([
+                        f"  - time={x.get('total_time_sec', 0):.3f}s, "
+                        f"calls={x.get('exec_count', 0)}, "
+                        f"rows={x.get('rows', 0)}, "
+                        f"sql={x.get('query_text', '')[:100]}"
+                        for x in top3
+                    ])
+                    metrics['slow_query_count'] = len(sq.get('top_sql_by_latency', []))
 
         prompt = self._build_prompt(db_type, label, metrics, issues, lang)
 

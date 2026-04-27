@@ -725,6 +725,10 @@ ZI = {
     "report.pg_issue_superuser_many": "超级用户数量过多",
     "report.pg_issue_disk_warning": "磁盘空间预警",
     "report.pg_issue_dead_tuples": "存在大量 dead tuples",
+    "report.pg_issue_pg_stat_statements_off": "pg_stat_statements 扩展未开启",
+    "report.pg_issue_slow_query_high_latency": "Top SQL 总体延迟偏高",
+    "report.pg_issue_slow_query_high_io": "发现高 IO SQL",
+    "report.pg_issue_long_running_sql": "存在长查询正在执行",
     "report.pg_fallback_priority_mid": "中",
     "report.pg_fallback_priority_low": "低",
     "report.pg_fallback_owner_dba": "DBA",
@@ -1136,6 +1140,9 @@ ZI = {
     "oracle_log_item_skip": "跳过",
     "oracle_log_ai_diagnosis": "AI 诊断...",
     "oracle_log_ai_calling": "正在调用 AI 诊断",
+    "oracle_log_slow_query": "慢查询深度分析...",
+    "oracle_log_slow_query_ok": "慢查询深度分析完成，采集到 {count} 条 Top SQL",
+    "oracle_log_slow_query_empty": "v$sql 视图不可用或无数据，跳过深度分析",
     "oracle_log_ai_ok": "AI 诊断完成",
     "oracle_log_ai_empty": "AI 诊断返回空",
     "oracle_log_ai_disabled": "AI 诊断未启用",
@@ -1192,6 +1199,9 @@ ZI = {
     "oracle_check_item_alert": "Alert日志",
 
     "mysql_cli_ai_calling": "正在调用 AI 诊断（{backend} / {model}）...",
+    "mysql_cli_slow_query_analyzing": "正在进行慢查询深度分析...",
+    "mysql_cli_slow_query_ok": "慢查询深度分析完成，采集到 {count} 条 Top SQL",
+    "mysql_cli_slow_query_ps_unavailable": "performance_schema 未开启或无慢查询数据，跳过深度分析",
     "mysql_cli_back_menu": "是否返回主菜单? (y/n) [y]: ",
     "mysql_cli_banner": "DBCheck - MySQL 巡检工具",
     "mysql_cli_batch_done": "批量巡检完成",
@@ -1288,6 +1298,9 @@ ZI = {
     "mysql_cli_local_disk_fail": "获取磁盘信息失败: {e}",
     "mysql_cli_host_disk_fail": "获取磁盘使用率失败: {e}",
     "pg_cli_ai_calling": "正在调用 AI 诊断（{backend} / {model}）...",
+    "pg_cli_slow_query_analyzing": "正在进行慢查询深度分析...",
+    "pg_cli_slow_query_ok": "慢查询深度分析完成，采集到 {count} 条 Top SQL",
+    "pg_cli_slow_query_pg_stat_unavailable": "pg_stat_statements 未开启，跳过深度分析（需要执行 CREATE EXTENSION pg_stat_statements）",
     "pg_cli_back_menu": "是否返回主菜单? (y/n) [y]: ",
     "pg_cli_banner": "DBCheck - PostgreSQL 巡检工具",
     "pg_cli_banner_title": "DBCheck - PostgreSQL 巡检工具",
@@ -1427,6 +1440,9 @@ ZI = {
     "dm8_warn_db_err": "[WARN]  [{item}] 数据库错误 ({code}): {e}",
     "dm8_warn_exc": "[WARN]  [{item}] {type}: {e}",
     "dm8_ai_calling": "\n🤖 正在调用 AI 诊断（{backend} / {model}）...",
+    "dm8_slow_query_analyzing": "正在进行慢查询深度分析...",
+    "dm8_slow_query_ok": "慢查询深度分析完成，采集到 {count} 条 Top SQL",
+    "dm8_slow_query_unavailable": "V$SQL 视图不可用，跳过深度分析",
     "dm8_starting": "开始 DM8 巡检...",
     "dm8_alt_render_fail": "备用渲染也失败了: {e}",
     # DM8 进度条 i18n
@@ -1543,6 +1559,10 @@ ZI = {
     "sqlserver_remote_disk_fail": "[FAIL] SSH 磁盘信息采集失败: %s",
     # AI 诊断相关
     "sqlserver.ai_calling": "正在调用 AI 诊断（%s / %s）...",
+    "sqlserver.slow_query_analyzing": "正在进行慢查询深度分析...",
+    "sqlserver.slow_query_ok": "慢查询深度分析完成，采集到 %d 条 Top SQL",
+    "sqlserver.slow_query_unavailable": "dm_exec_query_stats 视图不可用，跳过深度分析",
+
 
     # SQL Server CLI 交互式菜单
     "sqlserver_cli_banner": "DBCheck - SQL Server 巡检工具",
