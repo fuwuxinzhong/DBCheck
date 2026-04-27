@@ -329,7 +329,7 @@ ZI = {
     "webui.chart_title": "关键指标趋势图",
     "webui.checkbox_sysdba": "以 SYSDBA 身份连接",
     "webui.confirm_btn": "✅ 确认",
-    "webui.hero_desc": "自动采集 MySQL / PostgreSQL / Oracle / 达梦（DM）数据库关键指标，结合系统资源监控，一键生成专业 Word 巡检报告。",
+    "webui.hero_desc": "自动采集 MySQL / PostgreSQL / Oracle / SQL Server/ 达梦（DM）/ TiDB 数据库关键指标，结合系统资源监控，一键生成专业 Word 巡检报告。",
     "webui.hero_title": "数据库健康巡检",
     "webui.ind_cache_hit_ratio": "缓存命中率 (%)",
     "webui.ind_connections": "当前连接数",
