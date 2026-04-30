@@ -11,6 +11,7 @@
 [![DM](https://img.shields.io/badge/DM-yellow.svg)]()
 [![TiDB](https://img.shields.io/badge/TiDB-green.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
+[![捐赠者](https://img.shields.io/badge/捐赠者-2-blue.svg)]()
 
 > Language: [English](./README.md) | [中文](./README_zh.md)
 
@@ -830,3 +831,15 @@ DBCheck 从初版到功能完善，历经了大量版本迭代和实测打磨。
 > 捐赠时备注你的名字或昵称，让我们知道谁在支持这个项目 ❤️
 >
 > 联系邮箱：sdfiyon@gmail.com
+
+## 捐赠者名单
+
+感谢每一位支持者的信任与鼓励！❤️
+
+| 日期 | 姓名/昵称 | 留言 |
+|------|-----------|------|
+| 2026-4-28 | *ck | |
+| 2026-4-29 | *嵘 | |
+| *期待你的支持！* | | |
+
+> 如已捐赠但未出现在此名单中，请联系 sdfiyon@gmail.com 补充。

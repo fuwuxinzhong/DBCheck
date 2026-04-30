@@ -11,6 +11,7 @@
 [![DM](https://img.shields.io/badge/DM-yellow.svg)]()
 [![TiDB](https://img.shields.io/badge/TiDB-green.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
+[![Donors](https://img.shields.io/badge/donors-2-blue.svg)]()
 
 > Language: [English](./README.md) | [中文](./README_zh.md)
 
@@ -840,3 +841,15 @@ DBCheck has undergone extensive iteration and real-world testing to reach its cu
 > When donating, please include your name or nickname so we know who supports us ❤️
 >
 > Contact: sdfiyon@gmail.com
+
+## Donor List
+
+Thank you to everyone who has supported this project! ❤️
+
+| Date | Name / Nickname | Message |
+|------|------------------|---------|
+| 2026-4-28 | *ck | |
+| 2026-4-29 | *嵘 | |
+| *Looking forward to your support!* | | |
+
+> If you've donated but don't see your name here, please contact us at sdfiyon@gmail.com to have it added.
