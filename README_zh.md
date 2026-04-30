@@ -1,6 +1,6 @@
 # 数据库巡检工具 - DBCheck
 
->支持对 **MySQL**、**PostgreSQL**、**Oracle**、**SQL Server**、**达梦 DM8** 和 **TiDB** 六种主流关系型数据库进行自动化健康巡检，生成格式规范的 Microsoft Word 报告，帮助 DBA 和运维人员快速掌握数据库运行状况、发现潜在风险。
+DBCheck 是一款开源、跨平台的数据库自动化健康巡检工具，支持 MySQL、PostgreSQL、Oracle、SQL Server、达梦 DM8 及 TiDB 六种主流关系型数据库。工具通过执行预定义的 SQL 检查项与系统资源采集，自动生成格式规范的 Microsoft Word 巡检报告，并提供历史趋势分析、AI 智能诊断、配置基线合规检查、索引健康分析、慢查询深度分析、脱敏导出等高级功能。DBCheck 旨在将 DBA 从重复、耗时的手工巡检工作中解放出来，提升数据库运维效率与风险发现能力。
 
 
 [![Version](https://img.shields.io/badge/版本-2.3.6-blue.svg)]()

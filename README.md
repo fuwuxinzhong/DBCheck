@@ -1,6 +1,6 @@
 # DBCheck - Database Inspection Tool
 
->DBCheck is an automated database health inspection tool that supports **MySQL**, **PostgreSQL**, **Oracle**, **SQL Server**, **Dameng DM8**, and **TiDB**. It generates standardized Microsoft Word inspection reports, helping DBAs and operations staff quickly assess database health status and identify potential risks.
+DBCheck is an open-source, cross-platform automated database health check tool that supports six mainstream relational databases: **MySQL**, **PostgreSQL**, **Oracle**, **SQL Server**, **DM8**, and **TiDB**. The tool automatically generates standardized Microsoft Word inspection reports by executing predefined SQL checks and collecting system resources. It also provides advanced features such as historical trend analysis, AI-powered intelligent diagnostics, configuration baseline compliance checks, index health analysis, in-depth slow query analysis, and data-masked export. DBCheck aims to free DBAs from repetitive and time-consuming manual inspection work, improving database operation and maintenance efficiency and risk detection capabilities.
 
 
 [![Version](https://img.shields.io/badge/version-2.3.6-blue.svg)]()
