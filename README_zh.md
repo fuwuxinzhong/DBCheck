@@ -145,6 +145,143 @@ python main.py --lang zh         # 切换为中文（显式指定）
 | DM8 缓冲池详情 | — | — | — | — | ✅ | — |
 | 调度与亲和性策略 | — | — | — | — | — | ✅ |
 
+### 配置基线检查
+
+> 根据数据库规模、内存和负载自动计算推荐配置值，与当前值对比，识别配置偏差。
+
+#### MySQL（22 个参数）
+
+| 参数 | 说明 | 推荐值依据 |
+|------|------|-----------|
+| innodb_buffer_pool_size | InnoDB 缓冲池大小 | 总内存的 60–80% |
+| max_connections | 最大连接数 | 历史峰值的 1.5 倍 |
+| tmp_table_size / max_heap_table_size | 临时表/内存表大小 | 64MB；两者应保持一致 |
+| innodb_log_file_size | Redo 日志文件大小 | 256MB–1GB（按数据量）|
+| innodb_log_buffer_size | 日志缓冲区大小 | 16MB |
+| sync_binlog | Binlog 同步频率 | 高并发写入建议设为 1 |
+| innodb_flush_log_at_trx_commit | 事务提交日志刷盘策略 | 1（最严格、最安全）|
+| table_open_cache / table_definition_cache | 表缓存/表定义缓存 | 2× 表数量 / 线程数 |
+| thread_cache_size | 线程缓存大小 | 50+ 或 CPU 核心数的 2–4 倍 |
+| innodb_thread_concurrency | InnoDB 线程并发数 | CPU 核心数的 2 倍 |
+| innodb_io_capacity / io_capacity_max | I/O 容量（SSD/HDD）| 20000 / 200 |
+| max_allowed_packet | 最大数据包大小 | 16MB–64MB |
+| wait_timeout / interactive_timeout | 空闲连接超时 | 300–600 秒 |
+| sort_buffer_size / join_buffer_size | 排序/join 缓冲区 | 2–4MB / 1–2MB |
+| long_query_time | 慢查询阈值 | 1–2 秒 |
+
+#### PostgreSQL（21 个参数）
+
+| 参数 | 说明 | 推荐值依据 |
+|------|------|-----------|
+| shared_buffers | 共享缓冲区大小 | 总内存的 25% |
+| effective_cache_size | 有效缓存大小 | 总内存的 75% |
+| maintenance_work_mem | 维护操作内存 | 256MB–1GB |
+| work_mem | 工作内存 | (总内存 × 0.25) / max_connections |
+| max_connections | 最大连接数 | 200–1000 |
+| temp_buffers / wal_buffers | 临时/WAL 缓冲区 | 8MB / 16MB |
+| checkpoint_completion_target | 检查点完成目标 | 0.9 |
+| max_wal_size / min_wal_size | WAL 大小边界 | 2GB / 256MB |
+| random_page_cost | 随机页成本 | 1.1（SSD）/ 4.0（HDD）|
+| effective_io_concurrency | 有效 I/O 并发数 | 200（SSD）|
+| shared_preload_libraries | 预加载库 | 建议包含 pg_stat_statements |
+| track_activities / track_counts | 统计追踪 | on |
+| track_io_timing / track_functions | I/O/函数追踪 | on / pl |
+| autovacuum | 自动清理 | on |
+| log_min_duration_statement | 慢查询日志阈值 | 1000–3000ms |
+
+#### Oracle（12 个参数）
+
+| 参数 | 说明 | 推荐值依据 |
+|------|------|-----------|
+| memory_target | 内存目标（SGA+PGA）| 物理内存的 85% |
+| sga_target / pga_aggregate_target | SGA / PGA 目标 | 总内存的 60% / 25% |
+| processes | 最大进程数 | 150 或 CPU 核心数 × 50 |
+| open_cursors / session_cached_cursors | 游标设置 | 300–500 / 50 |
+| log_buffer | 日志缓冲区大小 | 8–64MB |
+| undo_retention | Undo 保留时间 | 3600 秒 |
+| fast_start_mttr_target | MTTR 目标 | 300 秒 |
+| db_file_multiblock_read_count | 多块读计数 | 128 |
+| statistics_level | 统计级别 | TYPICAL |
+| control_file_record_keep_time | 控制文件记录保留天数 | 7 天 |
+
+#### SQL Server（6 个参数）
+
+| 参数 | 说明 | 推荐值依据 |
+|------|------|-----------|
+| max server memory (MB) | 最大服务器内存 | 物理内存的 85% |
+| cost threshold for parallelism | 并行开销阈值 | 25–50 |
+| max degree of parallelism | 最大并行度 | CPU 核心数的一半 |
+| fill factor (%) | 填充因子 | 80–90% |
+| recovery interval (min) | 恢复间隔 | 60 分钟 |
+| backup compression default | 备份压缩默认 | 1（开启）|
+
+#### DM8（7 个参数）
+
+| 参数 | 说明 | 推荐值依据 |
+|------|------|-----------|
+| MEMORY_TARGET | 内存目标 | 物理内存的 85% |
+| SGA_TARGET / PGA_TARGET | SGA / PGA 目标 | 总内存的 60% / 25% |
+| MAX_SESSIONS / OPEN_CURSORS | 会话/游标限制 | 1000 / 500 |
+| UNDO_RETENTION | Undo 保留时间 | 3600 秒 |
+| BUFFER | 缓冲池大小 | 数据库大小的 30% |
+
+#### TiDB（9 个参数）
+
+| 参数 | 说明 | 推荐值依据 |
+|------|------|-----------|
+| innodb_buffer_pool_size | InnoDB 缓冲池大小 | 总内存的 70% |
+| max_connections | 最大连接数 | 3000 |
+| tmp_table_size / max_heap_table_size | 临时/内存表大小 | 256MB；两者应保持一致 |
+| innodb_log_file_size / innodb_log_buffer_size | 日志文件/缓冲区 | 256MB / 64MB |
+| max_allowed_packet | 最大包大小 | 64MB |
+| tidb_hash_join_concurrency / tidb_index_lookup_concurrency | 算子并发数 | 均为 5 |
+
+### 索引健康分析
+
+> 对所有支持的数据库进行三类索引问题检测——缺失索引、冗余/重复索引、长期未使用索引，并生成可操作的修复建议。
+
+#### MySQL
+
+| 分析类型 | 数据来源 | 说明 |
+|---------|---------|------|
+| 缺失索引 | performance_schema.events_statements_summary_by_digest + table_statistics | 识别高扫描查询和缺少主键的表 |
+| 冗余索引 | information_schema.STATISTICS | 查找同列的重复索引 |
+| 未使用索引 | performance_schema.table_statistics | 检测读写均为 0 的索引 |
+
+#### PostgreSQL
+
+| 分析类型 | 数据来源 | 说明 |
+|---------|---------|------|
+| 缺失索引 | pg_stat_statements | 识别高行扫描查询 |
+| 冗余索引 | pg_indexes（indexdef 解析）| 查找相同或左前缀匹配的索引对 |
+| 未使用索引 | pg_stat_user_indexes（idx_scan=0）| 检测从未扫描的索引 |
+
+#### Oracle
+
+| 分析类型 | 数据来源 | 说明 |
+|---------|---------|------|
+| 未使用索引 | v$object_usage（MONITORING USAGE）| 检测从未使用的索引 |
+| 冗余索引 | dba_ind_columns | 查找首列相同的索引对 |
+
+#### SQL Server
+
+| 分析类型 | 数据来源 | 说明 |
+|---------|---------|------|
+| 未使用索引 | sys.dm_db_index_usage_stats | 检测 user_seeks+user_scans 为 0 的索引 |
+| 冗余索引 | sys.indexes + sys.index_columns | 查找首列相同的索引对 |
+
+#### DM8
+
+| 分析类型 | 数据来源 | 说明 |
+|---------|---------|------|
+| 冗余索引 | USER_IND_COLUMNS | 查找相同或包含列的索引对 |
+
+#### TiDB
+
+| 分析类型 | 数据来源 | 说明 |
+|---------|---------|------|
+| 冗余索引 | information_schema.STATISTICS | 查找相同或左前缀匹配的索引对 |
+
 ### 系统资源监控
 
 - **CPU**：使用率、核心数、频率

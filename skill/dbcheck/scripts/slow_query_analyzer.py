@@ -418,55 +418,43 @@ SQLSERVER_SLOW_QUERIES = {
 }
 
 # DM8 慢查询 SQL
+# 说明：
+#   - 慢 SQL 视图：V$LONG_EXEC_SQLS（记录执行时间超过阈值的历史SQL）
+#   - 会话视图：V$SESSIONS（复数，非 V$SESSION）
+#   - SQL 文本：V$SESSIONS 中需用 SF_GET_SESSION_SQL(SESS_ID) 获取
+#   - 注意：V$SESSIONS 无 STATUS 列，用 SQL_ID IS NOT NULL 过滤有活动的会话
 DM_SLOW_QUERIES = {
     "dm_top_sql_by_time": """
         SELECT
             SQL_TEXT,
-            EXECUTIONS,
-            TOTAL_TIME / 1000 AS total_time_ms,
-            AVG_TIME / 1000 AS avg_time_ms,
-            MAX_TIME / 1000 AS max_time_ms,
-            MIN_TIME / 1000 AS min_time_ms,
-            TOTAL_READ_ROWS,
-            TOTAL_WRITE_ROWS,
-            TOTAL_READ_TIME / 1000 AS read_time_ms,
-            TOTAL_WRITE_TIME / 1000 AS write_time_ms,
-            FIRST_LOAD_TIME,
-            LAST_LOAD_TIME
-        FROM V$SQL
-        WHERE EXECUTIONS > 0
-        ORDER BY TOTAL_TIME DESC
+            N_RUNS      AS exec_count,
+            EXEC_TIME   AS exec_time_ms,
+            FINISH_TIME
+        FROM V$LONG_EXEC_SQLS
+        ORDER BY EXEC_TIME DESC
         LIMIT 20
     """,
 
     "dm_top_sql_by_disk_read": """
         SELECT
             SQL_TEXT,
-            EXECUTIONS,
-            TOTAL_READ_ROWS,
-            AVG_TIME / 1000 AS avg_time_ms,
-            TOTAL_READ_TIME / 1000 AS read_time_ms,
-            DISK_READS
-        FROM V$SQL
-        WHERE EXECUTIONS > 0
-          AND DISK_READS > 0
-        ORDER BY DISK_READS DESC
+            N_RUNS      AS exec_count,
+            EXEC_TIME   AS exec_time_ms
+        FROM V$LONG_EXEC_SQLS
+        WHERE EXEC_TIME > 0
+        ORDER BY EXEC_TIME DESC
         LIMIT 15
     """,
 
     "dm_long_sql": """
         SELECT
-            SESS_ID,
-            SQL_TEXT,
-            EXEC_TIME / 1000 AS exec_time_ms,
-            TRX_ID,
-            STATE,
-            SESS_TYPE
-        FROM V$SESSION
-        WHERE SESS_TYPE = 'ACTIVE'
-          AND SQL_TEXT IS NOT NULL
-          AND LENGTH(SQL_TEXT) > 0
-        ORDER BY EXEC_TIME DESC
+            SESS_ID     AS sess_id,
+            SF_GET_SESSION_SQL(SESS_ID) AS SQL_TEXT,
+            SQL_ID,
+            CREATE_TIME
+        FROM V$SESSIONS
+        WHERE SQL_ID IS NOT NULL
+        ORDER BY CREATE_TIME DESC
         LIMIT 15
     """,
 }
@@ -696,6 +684,7 @@ class BaseSlowQueryAnalyzer:
     DB_TYPE = 'base'
 
     def __init__(self):
+        self.db_type = self.DB_TYPE
         self._result = SlowQueryResult(self.DB_TYPE)
 
     def analyze(self, conn, ai_advisor=None, lang='zh') -> SlowQueryResult:
@@ -713,7 +702,7 @@ class BaseSlowQueryAnalyzer:
                 self._result.ai_diagnosis = ai_advisor._call_ollama(prompt, timeout=60)
             except Exception as e:
                 self._result.ai_diagnosis = ''
-                print(f"⚠️ 慢查询 AI 诊断失败 [{self.DB_TYPE}]: {e}")
+                print("⚠️ 慢查询 AI 诊断失败 [%s]: %s" % (self.DB_TYPE, e))
         return self._result
 
     def collect(self, conn):
@@ -734,7 +723,10 @@ class BaseSlowQueryAnalyzer:
                 return [dict(zip(cols, row)) for row in cursor.fetchall()]
             return []
         except Exception as e:
-            # 权限不足或扩展未开启时静默降级
+            # 权限不足或扩展未开启时打印具体错误再降级
+            import logging
+            logging.getLogger('slow_query').warning(
+                'SQL exec failed (db=%s): %s', self.db_type, str(e))
             return []
 
 
@@ -1094,27 +1086,22 @@ class DMSlowQueryAnalyzer(BaseSlowQueryAnalyzer):
         for row in raw.get('top_by_time', []):
             r.top_sql_by_latency.append({
                 'query_text': str(row.get('SQL_TEXT', ''))[:300],
-                'exec_count': row.get('EXECUTIONS', 0),
-                'total_time_ms': row.get('total_time_ms', 0),
-                'avg_time_ms': row.get('avg_time_ms', 0),
-                'max_time_ms': row.get('max_time_ms', 0),
-                'total_read_rows': row.get('TOTAL_READ_ROWS', 0),
+                'exec_count': row.get('exec_count', 0),
+                'exec_time_ms': row.get('exec_time_ms', 0),
             })
 
         for row in raw.get('top_by_disk_read', []):
             r.top_sql_by_io.append({
                 'query_text': str(row.get('SQL_TEXT', ''))[:300],
-                'exec_count': row.get('EXECUTIONS', 0),
-                'total_read_rows': row.get('TOTAL_READ_ROWS', 0),
-                'disk_reads': row.get('DISK_READS', 0),
-                'avg_time_ms': row.get('avg_time_ms', 0),
+                'exec_count': row.get('exec_count', 0),
+                'exec_time_ms': row.get('exec_time_ms', 0),
             })
 
         for row in raw.get('long_sql', []):
             r.slow_queries_current.append({
-                'sess_id': row.get('SESS_ID', ''),
-                'exec_time_ms': row.get('exec_time_ms', 0),
-                'state': row.get('STATE', ''),
+                'sess_id': row.get('sess_id', ''),
+                'exec_time_ms': 0,
+                'state': row.get('state', ''),
                 'query_text': str(row.get('SQL_TEXT', ''))[:200],
             })
 

@@ -1699,7 +1699,7 @@ def _docx_table(doc, headers, rows, header_bg='336699'):
     return tbl
 
 
-def build_word_report(db_info, os_data, check_results, db_version, ai_advice='', inspector='', lang='zh', desensitize=False):
+def build_word_report(db_info, os_data, check_results, db_version, ai_advice='', inspector='', lang='zh', desensitize=False, config_baseline_result=None, index_health_result=None):
     """构建完整 Word 巡检报告（纯 python-docx，无模板依赖）"""
     if not _HAS_DOCX:
         return None
@@ -1887,12 +1887,15 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
                         run.font.color.rgb = RGBColor(0, 102, 204)
                         run.font.size = Pt(12)
 
-                elif h_count == 3:        # ### 三级标题（24.1.1）
-                    h3_counter += 1
-                    h = doc.add_heading(f"24.{h2_counter}.{h3_counter} {title_text}", level=3)
-                    for run in h.runs:
-                        run.font.color.rgb = RGBColor(0, 102, 204)
-                        run.font.size = Pt(11)
+                elif h_count == 3:        # ### 四级标题 → 加粗普通段落
+                    p = doc.add_paragraph()
+                    run = p.add_run(title_text)
+                    run.font.bold = True
+                    run.font.size = Pt(10.5)
+                    p.paragraph_format.space_before = Pt(4)
+                    p.paragraph_format.space_after = Pt(2)
+                    prev_was_content = True
+                    continue
 
                 prev_was_content = False   # 标题不计入内容行
                 continue
@@ -2336,7 +2339,126 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
             for run in p.runs:
                 run.font.size = Pt(10.5)
 
-    # ── 第24章 AI 诊断 ─────────────────────────────────────────────────────
+    # ── 第24章 配置基线与索引健康 ────────────────────────────────────────
+    # ── 24.1 配置基线检查 ─────────────────────────────────────────────────
+    _add_section(_t('report.oracle_sec_config_baseline'))
+    if config_baseline_result:
+        cb = config_baseline_result
+        summary = cb.get('summary', {})
+        crit = summary.get('critical_count', 0)
+        warn = summary.get('warning_count', 0)
+        info = summary.get('info_count', 0)
+
+        # 摘要行
+        p = doc.add_paragraph()
+        run = p.add_run(f"⚠ Critical: {crit}  |  ⚡ Warning: {warn}  |  ℹ Info: {info}")
+        run.font.size = Pt(10.5)
+        run.font.bold = True
+        doc.add_paragraph()
+
+        # 差距表格
+        items = cb.get('items', [])
+        if items:
+            # 按严重程度排序
+            severity_order = {'critical': 0, 'warning': 1, 'info': 2}
+            items_sorted = sorted(items, key=lambda x: (severity_order.get(x.get('severity', 'info'), 2), x.get('param', '')))
+            headers = [
+                _t('report.tbl_col_key'),
+                _t('report.oracle_col_current'),
+                _t('report.oracle_col_recommended'),
+                _t('report.oracle_col_gap'),
+                _t('report.risk_level')
+            ]
+            rows = []
+            for item in items_sorted:
+                sev = item.get('severity', 'info')
+                gap_str = f"{item.get('gap', '')} ({item.get('gap_pct', 0):.0f}%)"
+                sev_str = {'critical': _t('report.risk_high'), 'warning': _t('report.risk_mid'), 'info': _t('report.risk_low')}.get(sev, sev)
+                rows.append([
+                    item.get('param', ''),
+                    item.get('current', ''),
+                    item.get('recommended', ''),
+                    gap_str,
+                    sev_str,
+                ])
+            _docx_table(doc, headers, rows)
+            doc.add_paragraph()
+        else:
+            p = doc.add_paragraph(_t('report.no_risk_found_oracle'))
+            run = p.runs[0] if p.runs else p.add_run(_t('report.no_risk_found_oracle'))
+            run.font.size = Pt(10.5)
+            doc.add_paragraph()
+    else:
+        p = doc.add_paragraph(_t('report.no_config_baseline'))
+        for run in p.runs:
+            run.font.size = Pt(10.5)
+            run.font.color.rgb = RGBColor(128, 128, 128)
+        doc.add_paragraph()
+
+    # ── 24.2 索引健康分析 ─────────────────────────────────────────────────
+    _add_section(_t('report.oracle_sec_index_health'))
+    if index_health_result:
+        ih = index_health_result
+        sm = ih.get('summary', {})
+        miss = sm.get('missing_count', 0)
+        redun = sm.get('redundant_count', 0)
+        unused = sm.get('unused_count', 0)
+
+        # 摘要
+        p = doc.add_paragraph()
+        run = p.add_run(f"⚠ 缺失: {miss}  |  🔁 冗余: {redun}  |  💤 未使用: {unused}")
+        run.font.size = Pt(10.5)
+        run.font.bold = True
+        doc.add_paragraph()
+
+        # 未使用索引
+        unused_list = ih.get('unused_indexes', [])
+        if unused_list:
+            _add_subsection(_t('report.oracle_idx_unused'))
+            headers = [_t('report.oracle_col_schema'), _t('report.oracle_col_table'),
+                       _t('report.oracle_col_idx_name'), _t('report.oracle_col_days_unused'),
+                       _t('report.oracle_col_recommendation')]
+            rows = [[i.get('table_schema', ''), i.get('table_name', ''), i.get('index_name', ''),
+                     str(i.get('days_unused', '')), i.get('recommendation', '')] for i in unused_list[:50]]
+            _docx_table(doc, headers, rows)
+            doc.add_paragraph()
+
+        # 冗余索引
+        redun_list = ih.get('redundant_indexes', [])
+        if redun_list:
+            _add_subsection(_t('report.oracle_idx_redundant'))
+            headers = [_t('report.oracle_col_schema'), _t('report.oracle_col_table'),
+                       _t('report.oracle_col_idx_name'), _t('report.oracle_col_idx_name2'),
+                       _t('report.oracle_col_column')]
+            rows = [[i.get('table_schema', ''), i.get('table_name', ''), i.get('index_name', ''),
+                     i.get('index_name2', ''), i.get('column_name', '')] for i in redun_list[:50]]
+            _docx_table(doc, headers, rows)
+            doc.add_paragraph()
+
+        # 缺失索引
+        miss_list = ih.get('missing_indexes', [])
+        if miss_list:
+            _add_subsection(_t('report.oracle_idx_missing'))
+            headers = [_t('report.oracle_col_schema'), _t('report.oracle_col_table'),
+                       _t('report.oracle_col_column'), _t('report.oracle_col_recommendation')]
+            rows = [[i.get('table_schema', ''), i.get('table_name', ''), i.get('column_name', ''),
+                     i.get('recommendation', '')] for i in miss_list[:50]]
+            _docx_table(doc, headers, rows)
+            doc.add_paragraph()
+
+        if not unused_list and not redun_list and not miss_list:
+            p = doc.add_paragraph(_t('report.no_risk_found_oracle'))
+            for run in p.runs:
+                run.font.size = Pt(10.5)
+            doc.add_paragraph()
+    else:
+        p = doc.add_paragraph(_t('report.no_index_health'))
+        for run in p.runs:
+            run.font.size = Pt(10.5)
+            run.font.color.rgb = RGBColor(128, 128, 128)
+        doc.add_paragraph()
+
+    # ── 第25章 AI 诊断 ────────────────────────────────────────────────────
     _add_section(_t('report.oracle_sec_ai'))
     if ai_advice:
         _render_ai_advice(doc, ai_advice)
@@ -2347,7 +2469,7 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
             run.font.color.rgb = RGBColor(128, 128, 128)
         doc.add_paragraph()
 
-    # ── 第25章 报告说明 ────────────────────────────────────────────────────
+    # ── 第26章 报告说明 ────────────────────────────────────────────────────
     _add_section(_t('report.notes_chapter'))
     notes = [
         _t('report.oracle_note_1'),
@@ -2535,7 +2657,6 @@ def single_inspection(args):
         except Exception as e:
             print(f"  ⚠ {_item_name(name)}  {_t('oracle_log_check_skip')}: {e}")
 
-    conn.close()
 
     # ── 4.5 AI 诊断（根据配置判断是否启用）───────────────────────────────────
     print(f"\n[{GREEN}4.5/6{RESET}] {_t('oracle_log_ai_diagnosis')}")
@@ -2657,6 +2778,43 @@ def single_inspection(args):
     except Exception as e:
         print(f"  \u26a0  慢查询深度分析失败: {e}")
 
+
+    # ── 4.7 配置基线检查（P3）────────────────────────────────────────────
+    config_baseline_result = None
+    try:
+        from config_baseline import check_oracle_config_baseline
+        print(f"\n[{GREEN}4.7/6{RESET}] {_t('oracle_cli_config_baseline_checking')}")
+        config_baseline_result = check_oracle_config_baseline(conn)
+        cb = config_baseline_result
+        summary = cb.get('summary', {})
+        crit = summary.get('critical_count', 0)
+        warn = summary.get('warning_count', 0)
+        info = summary.get('info_count', 0)
+        print(f"  ✅  {_t('oracle_cli_config_baseline_ok') % (crit, warn, info)}")
+    except ImportError:
+        print(f"  ⚠  config_baseline 模块未找到，跳过配置基线检查")
+    except Exception as e:
+        print(f"  ⚠  配置基线检查失败: {e}")
+
+    # ── 4.8 索引健康分析（P3）────────────────────────────────────────────
+    index_health_result = None
+    try:
+        from index_health import analyze_oracle_indexes
+        print(f"\n[{GREEN}4.8/6{RESET}] {_t('oracle_cli_index_health_checking')}")
+        index_health_result = analyze_oracle_indexes(conn)
+        ih = index_health_result
+        sm = ih.get('summary', {})
+        miss = sm.get('missing_count', 0)
+        redun = sm.get('redundant_count', 0)
+        unused = sm.get('unused_count', 0)
+        print(f"  ✅  {_t('oracle_cli_index_health_ok') % (miss, redun, unused)}")
+    except ImportError:
+        print(f"  ⚠  index_health 模块未找到，跳过索引健康分析")
+    except Exception as e:
+        print(f"  ⚠  索引健康分析失败: {e}")
+
+    conn.close()  # 关闭数据库连接
+
     # ── 5. 生成报告 ────────────────────────────────────────────────────────
     print(f"\n[{GREEN}5/6{RESET}] {_t('oracle_log_gen_report')}")
     # 从 check_results 提取 db_info
@@ -2682,7 +2840,9 @@ def single_inspection(args):
 
     docx = build_word_report(db_info, os_data, check_results, version_str, ai_advice,
                               inspector=args.inspector or 'dbcheck', lang=_lang,
-                              desensitize=bool(getattr(args, 'desensitize', False)))
+                              desensitize=bool(getattr(args, 'desensitize', False)),
+                              config_baseline_result=config_baseline_result,
+                              index_health_result=index_health_result)
 
     # ── 6. 保存报告 ────────────────────────────────────────────────────────
     print(f"\n[{GREEN}6/6{RESET}] {_t('oracle_log_save_report')}")
@@ -2696,7 +2856,7 @@ def single_inspection(args):
     # Word
     if docx:
         fname_template = _t('webui.oracle_report_filename')
-        docx_fname = fname_template.format(name=db_name, ts=ts)
+        docx_fname = fname_template.format(ip=args.host, name=db_name, ts=ts) + '.docx'
         docx_path  = os.path.join(output_dir, docx_fname)
         try:
             docx.save(docx_path)

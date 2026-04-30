@@ -73,6 +73,27 @@ def _t(key):
 # ── Markdown → Word 渲染器 ─────────────────────────────────────────────────
 import re
 
+def _set_cell_bg(cell, hex_color):
+    """设置单元格背景色（模块级辅助函数，供 WordTemplateGenerator 和 saveDoc 使用）"""
+    from docx.oxml.ns import nsdecls
+    from docx.oxml import parse_xml
+    shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
+    cell._tc.get_or_add_tcPr().append(shading)
+
+def _style_header(table):
+    """将表格首行设置为表头样式：蓝色背景 + 白色粗体 + 居中"""
+    from docx.shared import RGBColor, Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    hdr = table.rows[0].cells
+    for cell in hdr:
+        _set_cell_bg(cell, '336699')
+        for para in cell.paragraphs:
+            for run in para.runs:
+                run.font.color.rgb = RGBColor(255, 255, 255)
+                run.font.bold = True
+                run.font.size = Pt(9)
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
 def _render_markdown_to_doc(doc, text, default_size=11, ch8_prefix=False):
     """
     将 Markdown 文本渲染为 Word 段落，支持：
@@ -893,7 +914,7 @@ class WordTemplateGenerator:
         table = self.doc.add_table(rows=8, cols=2)
         table.style = 'Table Grid'
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4.5)
         table.columns[1].width = Cm(11)
 
@@ -963,7 +984,7 @@ class WordTemplateGenerator:
         heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         cells = table.rows[0].cells
@@ -999,7 +1020,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=4)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         for i in range(4):
             table.columns[i].width = Cm(3.5)
         hdr_cells = table.rows[0].cells
@@ -1007,6 +1028,7 @@ class WordTemplateGenerator:
         hdr_cells[1].text = '物理核心数'
         hdr_cells[2].text = '逻辑核心数'
         hdr_cells[3].text = '当前频率(GHz)'
+        _style_header(table)
         data_cells = table.rows[1].cells
         data_cells[0].text = "{% if system_info.cpu and system_info.cpu.usage_percent is defined %}{{ '%.2f'|format(system_info.cpu.usage_percent) }}%{% else %}未获取{% endif %}"
         data_cells[1].text = "{% if system_info.cpu and system_info.cpu.physical_cores is defined %}{{ system_info.cpu.physical_cores }}{% else %}未获取{% endif %}"
@@ -1025,7 +1047,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=4)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         for i in range(4):
             table.columns[i].width = Cm(3.5)
         hdr_cells = table.rows[0].cells
@@ -1033,6 +1055,7 @@ class WordTemplateGenerator:
         hdr_cells[1].text = '已使用(GB)'
         hdr_cells[2].text = '可用内存(GB)'
         hdr_cells[3].text = '使用率'
+        _style_header(table)
         data_cells = table.rows[1].cells
         data_cells[0].text = "{% if system_info.memory and system_info.memory.total_gb is defined %}{{ '%.2f'|format(system_info.memory.total_gb) }}{% else %}未获取{% endif %}"
         data_cells[1].text = "{% if system_info.memory and system_info.memory.used_gb is defined %}{{ '%.2f'|format(system_info.memory.used_gb) }}{% else %}未获取{% endif %}"
@@ -1051,19 +1074,14 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         table.columns[0].width = Cm(8)
         table.columns[1].width = Cm(4)
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = '挂载点'
         hdr_cells[1].text = '使用率'
-        for cell in hdr_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.size = Pt(10)
-                    run.font.bold = True
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _style_header(table)
         row_cells = table.add_row().cells
         row_cells[0].text = "{% for disk in system_info.disk_list %}{{ disk.mountpoint }}{% if not loop.last %}\n{% endif %}{% endfor %}"
         row_cells[1].text = "{% for disk in system_info.disk_list %}{% if disk.usage_percent is defined %}{{ '%.2f'|format(disk.usage_percent) }}%{% else %}未获取{% endif %}{% if not loop.last %}\n{% endif %}{% endfor %}"
@@ -1092,12 +1110,13 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=5, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = '配置项'
         hdr_cells[1].text = '当前值'
+        _style_header(table)
         data_cells = table.rows[1].cells
         data_cells[0].text = '最大连接数'
         data_cells[1].text = "{% if max_connections and max_connections[0]['Value'] %}{{ max_connections[0]['Value'] }}{% endif %}"
@@ -1123,12 +1142,13 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=5, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = '配置项'
         hdr_cells[1].text = '当前值'
+        _style_header(table)
         data_cells = table.rows[1].cells
         data_cells[0].text = 'InnoDB缓冲池'
         data_cells[1].text = "{% if innodb_buffer_pool_size and innodb_buffer_pool_size[0]['Value'] %}{{ innodb_buffer_pool_size[0]['Value'] }}{% endif %}"
@@ -1154,12 +1174,13 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=5, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = '配置项'
         hdr_cells[1].text = '当前值'
+        _style_header(table)
         data_cells = table.rows[1].cells
         data_cells[0].text = '慢查询日志'
         data_cells[1].text = "{% if slow_query_log and slow_query_log[0]['Value'] %}{{ slow_query_log[0]['Value'] }}{% endif %}"
@@ -1197,12 +1218,13 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = '查询总数'
         hdr_cells[1].text = '值'
+        _style_header(table)
         data_cells = table.rows[1].cells
         data_cells[0].text = '总查询数'
         data_cells[1].text = "{% if queries and queries[0]['Value'] %}{{ queries[0]['Value'] }}{% endif %}"
@@ -1219,12 +1241,13 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=3, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = '锁类型'
         hdr_cells[1].text = '值'
+        _style_header(table)
         data_cells1 = table.rows[1].cells
         data_cells1[0].text = '立即锁表'
         data_cells1[1].text = "{% if table_locks_immediate and table_locks_immediate[0]['Value'] %}{{ table_locks_immediate[0]['Value'] }}{% endif %}"
@@ -1244,12 +1267,13 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=3, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(10)
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = '异常类型'
         hdr_cells[1].text = '值'
+        _style_header(table)
         data_cells1 = table.rows[1].cells
         data_cells1[0].text = '异常客户端连接'
         data_cells1[1].text = "{% if aborted_connections and aborted_connections|length > 0 and aborted_connections[0]['Value'] %}{{ aborted_connections[0]['Value'] }}{% endif %}"
@@ -1281,7 +1305,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=4)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(4)
         table.columns[1].width = Cm(3)
         table.columns[2].width = Cm(3)
@@ -1291,6 +1315,7 @@ class WordTemplateGenerator:
         hdr_cells[1].text = '表行数'
         hdr_cells[2].text = '数据大小(MB)'
         hdr_cells[3].text = '索引大小(MB)'
+        _style_header(table)
         for cell in hdr_cells:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
@@ -1314,7 +1339,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=6)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(2)
         table.columns[1].width = Cm(2)
         table.columns[2].width = Cm(2)
@@ -1328,6 +1353,7 @@ class WordTemplateGenerator:
         hdr_cells[3].text = '状态'
         hdr_cells[4].text = '命令'
         hdr_cells[5].text = '时间'
+        _style_header(table)
         for cell in hdr_cells:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
@@ -1366,7 +1392,7 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
         table.style = 'Table Grid'
-        table.autofit = False
+        table.autofit = True
         table.columns[0].width = Cm(3)
         table.columns[1].width = Cm(3)
         table.columns[2].width = Cm(2)
@@ -1378,6 +1404,7 @@ class WordTemplateGenerator:
         hdr_cells[2].text = '授权权限'
         hdr_cells[3].text = '认证插件'
         hdr_cells[4].text = '账户锁定'
+        _style_header(table)
         for cell in hdr_cells:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
@@ -2004,6 +2031,43 @@ class getData(object):
             self.context['ai_advice'] = ''
 
         self.print_progress_bar(total_steps, total_steps, prefix=_t('tidb_cli_progress_prefix'), suffix=_t('tidb_cli_complete_suffix'))
+
+        # ── 配置基线检查（P3）───────────────────────────────
+        self.context['config_baseline_result'] = None
+        try:
+            from config_baseline import check_tidb_config_baseline
+            if self.conn_db2:
+                print("\n\U0001f539 " + _t('tidb_cli_config_baseline_checking'))
+                cb_result = check_tidb_config_baseline(self.conn_db2)
+                self.context['config_baseline_result'] = cb_result
+                summary = cb_result.get('summary', {})
+                crit = summary.get('critical_count', 0)
+                warn = summary.get('warning_count', 0)
+                info = summary.get('info_count', 0)
+                print("  \u2705  " + (_t('tidb_cli_config_baseline_ok') % (crit, warn, info)))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("  \u26a0  配置基线检查失败: %s" % e)
+
+        # ── 索引健康分析（P3）───────────────────────────────
+        self.context['index_health_result'] = None
+        try:
+            from index_health import analyze_tidb_indexes
+            if self.conn_db2:
+                print("\n\U0001f50d " + _t('tidb_cli_index_health_checking'))
+                ih_result = analyze_tidb_indexes(self.conn_db2)
+                self.context['index_health_result'] = ih_result
+                sm = ih_result.get('summary', {})
+                miss = sm.get('missing_count', 0)
+                redun = sm.get('redundant_count', 0)
+                unused = sm.get('unused_count', 0)
+                print("  \u2705  " + (_t('tidb_cli_index_health_ok') % (miss, redun, unused)))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("  \u26a0  索引健康分析失败: %s" % e)
+
         return self.context
 
 class saveDoc(object):  # TiDB
@@ -2123,18 +2187,42 @@ class saveDoc(object):  # TiDB
                 # docxtpl 模板本身有旧的"7.报告说明"，先把它及之后的内容删掉，再追加新章节
                 doc2 = Document(self.ofile)
                 # 找到模板里旧的"7. 报告说明"段落位置，删掉它及之后的所有段落
-                cutoff_idx = None
-                for i, para in enumerate(doc2.paragraphs):
+                cutoff_element = None
+                for para in doc2.paragraphs:
                     t = para.text.strip()
-                    # 找到旧的"7. 报告说明"段落位置（通过检测第7章标题模式）
                     if t.startswith('7.') and (self._t('report.notes_chapter') in t or '报告说明' in t or 'Report Notes' in t):
-                        cutoff_idx = i
+                        cutoff_element = para._element
                         break
-                if cutoff_idx is not None:
-                    # python-docx 不提供直接按索引批量删除段落，通过 element 操作
+                if cutoff_element is not None:
+                    ns_w = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
                     body = doc2._element.body
-                    for para in list(body.iterchildren())[cutoff_idx:]:
-                        body.remove(para)
+                    found = False
+                    to_remove = []
+                    for el in body.iterchildren():
+                        if el == cutoff_element:
+                            found = True
+                        if found:
+                            tag = el.tag.split('}')[1] if '}' in el.tag else el.tag
+                            if tag != 'sectPr':
+                                to_remove.append(el)
+                    for el in to_remove:
+                        body.remove(el)
+                    # 确认 sectPr 仍在
+                    remaining_sectPr = body.find('{%s}sectPr' % ns_w)
+                    if remaining_sectPr is None:
+                        from docx.oxml import OxmlElement
+                        from docx.oxml.ns import qn
+                        new_sp = OxmlElement('w:sectPr')
+                        pgMar = OxmlElement('w:pgMar')
+                        for attr, val in [('w:top','1440'),('w:bottom','1440'),('w:left','1440'),('w:right','1440')]:
+                            pgMar.set(qn(attr), val)
+                        new_sp.append(pgMar)
+                        pgSz = OxmlElement('w:pgSz')
+                        pgSz.set(qn('w:w'), '11906')
+                        pgSz.set(qn('w:h'), '16838')
+                        new_sp.append(pgSz)
+                        body.append(new_sp)
+
 
                 # 翻译 auto_analyze 中的中文值 -> 英文翻译
                 _MYSQL_RISK_KEY_MAP = {
@@ -2343,8 +2431,168 @@ class saveDoc(object):  # TiDB
                     p = doc2.add_paragraph()
                     p.add_run(self._t('report.ai_disabled')).italic = True
 
-                # 第 9 章 报告说明
-                doc2.add_heading('9. ' + self._t('report.notes_chapter'), level=1)
+                # 第 9 章 配置基线检查（P3）
+                cb_result = self.context.get('config_baseline_result')
+                if cb_result:
+                    doc2.add_heading('9. ' + self._t('report.config_baseline_chapter'), level=1)
+                    db_size = cb_result.get('db_size_gb', 0)
+                    total_mem = cb_result.get('total_memory_gb', 0)
+                    p = doc2.add_paragraph()
+                    p.add_run("数据库规模: %.2f GB | 主机内存: %.1f GB" % (db_size, total_mem)).italic = True
+                    doc2.add_paragraph()
+                    summary = cb_result.get('summary', {})
+                    crit = summary.get('critical_count', 0)
+                    warn = summary.get('warning_count', 0)
+                    info = summary.get('info_count', 0)
+                    p = doc2.add_paragraph()
+                    p.add_run(self._t('report.config_baseline_summary').format(critical=crit, warning=warn, info=info))
+                    items = cb_result.get('items', [])
+                    if items:
+                        col_w = [Cm(3.0), Cm(2.5), Cm(2.5), Cm(2.5), Cm(5.5)]
+                        tbl = doc2.add_table(rows=1+len(items), cols=5)
+                        tbl.style = 'Table Grid'
+                        hdrs = [self._t('report.col_param'), self._t('report.col_current'),
+                                self._t('report.col_recommended'), self._t('report.col_gap'),
+                                self._t('report.col_desc')]
+                        for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                            cell.text = ht
+                            self._set_cell_bg(cell, '336699')
+                            cell.paragraphs[0].runs[0].bold = True
+                            cell.paragraphs[0].runs[0].font.size = Pt(9)
+                            cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell.width = col_w[j]
+                        for idx, item in enumerate(items, 1):
+                            row = tbl.rows[idx].cells
+                            row[0].text = item.get('param', '')
+                            row[1].text = item.get('current', '')
+                            row[2].text = item.get('recommended', '')
+                            row[3].text = item.get('gap', '')
+                            row[4].text = item.get('description', '')
+                            sev = item.get('severity', 'info')
+                            cm = {'critical': RGBColor(0xC0,0x00,0x00), 'warning': RGBColor(0xFF,0x78,0x00), 'info': RGBColor(0x37,0x86,0x10)}
+                            if sev in cm:
+                                for cell in row:
+                                    for para in cell.paragraphs:
+                                        for run in para.runs:
+                                            run.font.color.rgb = cm[sev]
+                                            break
+                                    break
+                            for j, cell in enumerate(row):
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.size = Pt(9)
+                                cell.width = col_w[j]
+                    else:
+                        doc2.add_paragraph(self._t('report.config_baseline_no_issues'))
+                    doc2.add_paragraph()
+
+                # 第 10 章 索引健康分析（P3）
+                ih_result = self.context.get('index_health_result')
+                if ih_result:
+                    doc2.add_heading('10. ' + self._t('report.index_health_chapter'), level=1)
+                    summary = ih_result.get('summary', {})
+                    db_size = summary.get('db_size_gb', 0)
+                    total_idx = summary.get('total_indexes', 0)
+                    p = doc2.add_paragraph()
+                    p.add_run("数据库大小: %.2f GB | 总索引数: %d" % (db_size, total_idx)).italic = True
+                    doc2.add_paragraph()
+                    missing = ih_result.get('missing_indexes', [])
+                    redundant = ih_result.get('redundant_indexes', [])
+                    unused = ih_result.get('unused_indexes', [])
+                    if missing:
+                        doc2.add_heading(self._t('report.index_missing_sub'), level=2)
+                        col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                        tbl = doc2.add_table(rows=1+len(missing), cols=5)
+                        tbl.style = 'Table Grid'
+                        hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                                self._t('report.col_column'), self._t('report.col_select_count'),
+                                self._t('report.col_recommendation')]
+                        for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                            cell.text = ht
+                            self._set_cell_bg(cell, '993333')
+                            cell.paragraphs[0].runs[0].bold = True
+                            cell.paragraphs[0].runs[0].font.size = Pt(9)
+                            cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell.width = col_w[j]
+                        for idx, item in enumerate(missing, 1):
+                            row = tbl.rows[idx].cells
+                            row[0].text = item.get('table_schema', '')
+                            row[1].text = item.get('table_name', '')
+                            row[2].text = item.get('column_name', '')
+                            row[3].text = str(item.get('select_count', 0))
+                            row[4].text = item.get('recommendation', '')
+                            for j, cell in enumerate(row):
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.size = Pt(9)
+                                cell.width = col_w[j]
+                        doc2.add_paragraph()
+                    if redundant:
+                        doc2.add_heading(self._t('report.index_redundant_sub'), level=2)
+                        col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                        tbl = doc2.add_table(rows=1+len(redundant), cols=5)
+                        tbl.style = 'Table Grid'
+                        hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                                'Index 1', 'Index 2', self._t('report.col_recommendation')]
+                        for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                            cell.text = ht
+                            self._set_cell_bg(cell, '996633')
+                            cell.paragraphs[0].runs[0].bold = True
+                            cell.paragraphs[0].runs[0].font.size = Pt(9)
+                            cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell.width = col_w[j]
+                        for idx, item in enumerate(redundant, 1):
+                            row = tbl.rows[idx].cells
+                            row[0].text = item.get('table_schema', '')
+                            row[1].text = item.get('table_name', '')
+                            row[2].text = item.get('index1', '')
+                            row[3].text = item.get('index2', '')
+                            row[4].text = item.get('recommendation', '')
+                            for j, cell in enumerate(row):
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.size = Pt(9)
+                                cell.width = col_w[j]
+                        doc2.add_paragraph()
+                    if unused:
+                        doc2.add_heading(self._t('report.index_unused_sub'), level=2)
+                        col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.0), Cm(2.0), Cm(4.5)]
+                        tbl = doc2.add_table(rows=1+len(unused), cols=6)
+                        tbl.style = 'Table Grid'
+                        hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                                self._t('report.col_index'), self._t('report.col_last_used'),
+                                self._t('report.col_days_unused'), self._t('report.col_recommendation')]
+                        for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                            cell.text = ht
+                            self._set_cell_bg(cell, '669933')
+                            cell.paragraphs[0].runs[0].bold = True
+                            cell.paragraphs[0].runs[0].font.size = Pt(9)
+                            cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell.width = col_w[j]
+                        for idx, item in enumerate(unused, 1):
+                            row = tbl.rows[idx].cells
+                            row[0].text = item.get('table_schema', '')
+                            row[1].text = item.get('table_name', '')
+                            row[2].text = item.get('index_name', '')
+                            row[3].text = item.get('last_used', 'N/A')
+                            row[4].text = str(item.get('days_unused', 0))
+                            row[5].text = item.get('recommendation', '')
+                            for j, cell in enumerate(row):
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.size = Pt(9)
+                                cell.width = col_w[j]
+                        doc2.add_paragraph()
+                    if not missing and not redundant and not unused:
+                        doc2.add_paragraph(self._t('report.index_health_no_issues'))
+                    doc2.add_paragraph()
+
+                # 第 11 章 报告说明
+                doc2.add_heading('11. ' + self._t('report.notes_chapter'), level=1)
                 notes = [
                     self._t("report.note_1"),
                     self._t("report.note_2"),
@@ -2891,9 +3139,171 @@ class saveDoc(object):  # TiDB
                     if code_p.runs:
                         code_p.runs[0].font.size = Pt(9)
 
-            # ── 8. AI 智能诊断建议 ──
+            # ── 8. 配置基线检查 ──
+            cb_result = self.context.get('config_baseline_result')
+            if cb_result:
+                doc.add_heading('8. ' + self._t('report.config_baseline_chapter'), level=1)
+                db_size = cb_result.get('db_size_gb', 0)
+                qps = cb_result.get('qps', 0)
+                total_mem = cb_result.get('total_memory_gb', 0)
+                p = doc.add_paragraph()
+                p.add_run(f"数据库规模: {db_size:.2f} GB | QPS: {qps} | 主机内存: {total_mem:.1f} GB").italic = True
+                doc.add_paragraph()
+                items = cb_result.get('items', [])
+                summary = cb_result.get('summary', {})
+                crit_count = summary.get('critical_count', 0)
+                warn_count = summary.get('warning_count', 0)
+                info_count = summary.get('info_count', 0)
+                p = doc.add_paragraph()
+                p.add_run(self._t('report.config_baseline_summary').format(
+                    critical=crit_count, warning=warn_count, info=info_count))
+                if items:
+                    col_w = [Cm(3.0), Cm(2.5), Cm(2.5), Cm(2.5), Cm(5.5)]
+                    tbl = doc.add_table(rows=1+len(items), cols=5)
+                    tbl.style = 'Table Grid'
+                    hdrs = [self._t('report.col_param'), self._t('report.col_current'),
+                            self._t('report.col_recommended'), self._t('report.col_gap'),
+                            self._t('report.col_desc')]
+                    for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                        cell.text = ht
+                        self._set_cell_bg(cell, '336699')
+                        cell.paragraphs[0].runs[0].bold = True
+                        cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        cell.width = col_w[j]
+                    for idx, item in enumerate(items, 1):
+                        row = tbl.rows[idx].cells
+                        row[0].text = item.get('param', '')
+                        row[1].text = item.get('current', '')
+                        row[2].text = item.get('recommended', '')
+                        row[3].text = item.get('gap', '')
+                        row[4].text = item.get('description', '')
+                        sev = item.get('severity', 'info')
+                        cm = {'critical': RGBColor(0xC0,0x00,0x00), 'warning': RGBColor(0xFF,0x78,0x00), 'info': RGBColor(0x37,0x86,0x10)}
+                        if sev in cm:
+                            for cell in row:
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.color.rgb = cm[sev]
+                                        break
+                                break
+                        for j, cell in enumerate(row):
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.size = Pt(9)
+                            cell.width = col_w[j]
+                else:
+                    doc.add_paragraph(self._t('report.config_baseline_no_issues'))
+                doc.add_paragraph()
+
+            # ── 9. 索引健康分析 ──
+            ih_result = self.context.get('index_health_result')
+            if ih_result:
+                doc.add_heading('9. ' + self._t('report.index_health_chapter'), level=1)
+                summary = ih_result.get('summary', {})
+                db_size = summary.get('db_size_gb', 0)
+                total_idx = summary.get('total_indexes', 0)
+                p = doc.add_paragraph()
+                p.add_run(f"数据库大小: {db_size:.2f} GB | 总索引数: {total_idx}").italic = True
+                doc.add_paragraph()
+                missing = ih_result.get('missing_indexes', [])
+                if missing:
+                    doc.add_heading(self._t('report.index_missing_sub'), level=2)
+                    col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                    tbl = doc.add_table(rows=1+len(missing), cols=5)
+                    tbl.style = 'Table Grid'
+                    hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                            self._t('report.col_column'), self._t('report.col_select_count'),
+                            self._t('report.col_recommendation')]
+                    for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                        cell.text = ht
+                        self._set_cell_bg(cell, '993333')
+                        cell.paragraphs[0].runs[0].bold = True
+                        cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        cell.width = col_w[j]
+                    for idx, item in enumerate(missing, 1):
+                        row = tbl.rows[idx].cells
+                        row[0].text = item.get('table_schema', '')
+                        row[1].text = item.get('table_name', '')
+                        row[2].text = item.get('column_name', '')
+                        row[3].text = str(item.get('select_count', 0))
+                        row[4].text = item.get('recommendation', '')
+                        for j, cell in enumerate(row):
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.size = Pt(9)
+                            cell.width = col_w[j]
+                    doc.add_paragraph()
+                redundant = ih_result.get('redundant_indexes', [])
+                if redundant:
+                    doc.add_heading(self._t('report.index_redundant_sub'), level=2)
+                    col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                    tbl = doc.add_table(rows=1+len(redundant), cols=5)
+                    tbl.style = 'Table Grid'
+                    hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                            'Index 1', 'Index 2', self._t('report.col_recommendation')]
+                    for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                        cell.text = ht
+                        self._set_cell_bg(cell, '996633')
+                        cell.paragraphs[0].runs[0].bold = True
+                        cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        cell.width = col_w[j]
+                    for idx, item in enumerate(redundant, 1):
+                        row = tbl.rows[idx].cells
+                        row[0].text = item.get('table_schema', '')
+                        row[1].text = item.get('table_name', '')
+                        row[2].text = item.get('index1', '')
+                        row[3].text = item.get('index2', '')
+                        row[4].text = item.get('recommendation', '')
+                        for j, cell in enumerate(row):
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.size = Pt(9)
+                            cell.width = col_w[j]
+                    doc.add_paragraph()
+                unused = ih_result.get('unused_indexes', [])
+                if unused:
+                    doc.add_heading(self._t('report.index_unused_sub'), level=2)
+                    col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.0), Cm(2.0), Cm(4.5)]
+                    tbl = doc.add_table(rows=1+len(unused), cols=6)
+                    tbl.style = 'Table Grid'
+                    hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                            self._t('report.col_index'), self._t('report.col_last_used'),
+                            self._t('report.col_days_unused'), self._t('report.col_recommendation')]
+                    for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                        cell.text = ht
+                        self._set_cell_bg(cell, '669933')
+                        cell.paragraphs[0].runs[0].bold = True
+                        cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        cell.width = col_w[j]
+                    for idx, item in enumerate(unused, 1):
+                        row = tbl.rows[idx].cells
+                        row[0].text = item.get('table_schema', '')
+                        row[1].text = item.get('table_name', '')
+                        row[2].text = item.get('index_name', '')
+                        row[3].text = item.get('last_used', 'N/A')
+                        row[4].text = str(item.get('days_unused', 0))
+                        row[5].text = item.get('recommendation', '')
+                        for j, cell in enumerate(row):
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.size = Pt(9)
+                            cell.width = col_w[j]
+                    doc.add_paragraph()
+                if not missing and not redundant and not unused:
+                    doc.add_paragraph(self._t('report.index_health_no_issues'))
+                doc.add_paragraph()
+
+            # ── 10. AI 智能诊断建议 ──
             ai_advice = self.context.get('ai_advice', '').strip()
-            doc.add_heading('8. ' + self._t('report.fallback_ai_chapter'), level=1)
+            doc.add_heading('10. ' + self._t('report.fallback_ai_chapter'), level=1)
             if ai_advice:
                 p = doc.add_paragraph()
                 p.add_run(self._t('report.fallback_ai_disclaimer')).italic = True
@@ -2904,7 +3314,7 @@ class saveDoc(object):  # TiDB
                 p.add_run(self._t('report.ai_disabled')).italic = True
 
             # ── 9. 报告说明 ──
-            doc.add_heading('9. ' + self._t('report.fallback_notes_chapter'), level=1)
+            doc.add_heading('11. ' + self._t('report.fallback_notes_chapter'), level=1)
             notes = [
                 self._t("report.fallback_note_1"),
                 self._t("report.fallback_note_2"),
@@ -2958,7 +3368,7 @@ class saveDoc(object):  # TiDB
         hdr = table.rows[0].cells
         hdr[0].text = self._t('report.fallback_item_col')
         hdr[1].text = self._t('report.fallback_value_col')
-        self._set_table_header(table)
+        _style_header(table)
         for i, (label, key) in enumerate(items, 1):
             cells = table.rows[i].cells
             cells[0].text = label

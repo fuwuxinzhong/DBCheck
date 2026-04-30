@@ -1699,7 +1699,7 @@ def _docx_table(doc, headers, rows, header_bg='336699'):
     return tbl
 
 
-def build_word_report(db_info, os_data, check_results, db_version, ai_advice='', inspector='', lang='zh', desensitize=False):
+def build_word_report(db_info, os_data, check_results, db_version, ai_advice='', inspector='', lang='zh', desensitize=False, config_baseline_result=None, index_health_result=None):
     """构建完整 Word 巡检报告（纯 python-docx，无模板依赖）"""
     if not _HAS_DOCX:
         return None
@@ -2347,6 +2347,166 @@ def build_word_report(db_info, os_data, check_results, db_version, ai_advice='',
             run.font.color.rgb = RGBColor(128, 128, 128)
         doc.add_paragraph()
 
+    # ── 第24.1章 配置基线检查（P3）──────────────────────────────────────────
+    if config_baseline_result:
+        _add_section(_t('report.config_baseline_chapter'))
+        cb = config_baseline_result
+        db_size = cb.get('db_size_gb', 0)
+        total_mem = cb.get('total_memory_gb', 0)
+        p = doc.add_paragraph()
+        p.add_run("数据库规模: %.2f GB | 主机内存: %.1f GB" % (db_size, total_mem)).italic = True
+        doc.add_paragraph()
+        summary = cb.get('summary', {})
+        crit = summary.get('critical_count', 0)
+        warn = summary.get('warning_count', 0)
+        info = summary.get('info_count', 0)
+        p = doc.add_paragraph()
+        p.add_run(_t('report.config_baseline_summary').format(critical=crit, warning=warn, info=info))
+        items = cb.get('items', [])
+        if items:
+            col_w = [Cm(3.0), Cm(2.5), Cm(2.5), Cm(2.5), Cm(5.5)]
+            tbl = doc.add_table(rows=1+len(items), cols=5)
+            tbl.style = 'Table Grid'
+            hdrs = [_t('report.col_param'), _t('report.col_current'),
+                    _t('report.col_recommended'), _t('report.col_gap'),
+                    _t('report.col_desc')]
+            for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                cell.text = ht
+                _set_cell_bg(cell, '336699')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
+            for idx, item in enumerate(items, 1):
+                row = tbl.rows[idx].cells
+                row[0].text = item.get('param', '')
+                row[1].text = item.get('current', '')
+                row[2].text = item.get('recommended', '')
+                row[3].text = item.get('gap', '')
+                row[4].text = item.get('description', '')
+                sev = item.get('severity', 'info')
+                cm = {'critical': RGBColor(0xC0,0x00,0x00), 'warning': RGBColor(0xFF,0x78,0x00), 'info': RGBColor(0x37,0x86,0x10)}
+                if sev in cm:
+                    for cell in row:
+                        for para in cell.paragraphs:
+                            for run in para.runs:
+                                run.font.color.rgb = cm[sev]
+                                break
+                        break
+                for j, cell in enumerate(row):
+                    for para in cell.paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(9)
+                    cell.width = col_w[j]
+        else:
+            p2 = doc.add_paragraph(_t('report.config_baseline_no_issues'))
+        doc.add_paragraph()
+
+    # ── 第24.2章 索引健康分析（P3）──────────────────────────────────────────
+    if index_health_result:
+        _add_section(_t('report.index_health_chapter'))
+        ih = index_health_result
+        summary = ih.get('summary', {})
+        db_size = summary.get('db_size_gb', 0)
+        total_idx = summary.get('total_indexes', 0)
+        p = doc.add_paragraph()
+        p.add_run("数据库大小: %.2f GB | 总索引数: %d" % (db_size, total_idx)).italic = True
+        doc.add_paragraph()
+        missing = ih.get('missing_indexes', [])
+        redundant = ih.get('redundant_indexes', [])
+        unused = ih.get('unused_indexes', [])
+        if missing:
+            _add_subsection(_t('report.index_missing_sub'))
+            col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+            tbl = doc.add_table(rows=1+len(missing), cols=5)
+            tbl.style = 'Table Grid'
+            hdrs = [_t('report.col_schema'), _t('report.col_table'),
+                    _t('report.col_column'), _t('report.col_select_count'),
+                    _t('report.col_recommendation')]
+            for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                cell.text = ht
+                _set_cell_bg(cell, '993333')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
+            for idx, item in enumerate(missing, 1):
+                row = tbl.rows[idx].cells
+                row[0].text = item.get('table_schema', '')
+                row[1].text = item.get('table_name', '')
+                row[2].text = item.get('column_name', '')
+                row[3].text = str(item.get('select_count', 0))
+                row[4].text = item.get('recommendation', '')
+                for j, cell in enumerate(row):
+                    for para in cell.paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(9)
+                    cell.width = col_w[j]
+            doc.add_paragraph()
+        if redundant:
+            _add_subsection(_t('report.index_redundant_sub'))
+            col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+            tbl = doc.add_table(rows=1+len(redundant), cols=5)
+            tbl.style = 'Table Grid'
+            hdrs = [_t('report.col_schema'), _t('report.col_table'),
+                    'Index 1', 'Index 2', _t('report.col_recommendation')]
+            for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                cell.text = ht
+                _set_cell_bg(cell, '996633')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
+            for idx, item in enumerate(redundant, 1):
+                row = tbl.rows[idx].cells
+                row[0].text = item.get('table_schema', '')
+                row[1].text = item.get('table_name', '')
+                row[2].text = item.get('index1', '')
+                row[3].text = item.get('index2', '')
+                row[4].text = item.get('recommendation', '')
+                for j, cell in enumerate(row):
+                    for para in cell.paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(9)
+                    cell.width = col_w[j]
+            doc.add_paragraph()
+        if unused:
+            _add_subsection(_t('report.index_unused_sub'))
+            col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.0), Cm(2.0), Cm(4.5)]
+            tbl = doc.add_table(rows=1+len(unused), cols=6)
+            tbl.style = 'Table Grid'
+            hdrs = [_t('report.col_schema'), _t('report.col_table'),
+                    _t('report.col_index'), _t('report.col_last_used'),
+                    _t('report.col_days_unused'), _t('report.col_recommendation')]
+            for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                cell.text = ht
+                _set_cell_bg(cell, '669933')
+                cell.paragraphs[0].runs[0].bold = True
+                cell.paragraphs[0].runs[0].font.size = Pt(9)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.width = col_w[j]
+            for idx, item in enumerate(unused, 1):
+                row = tbl.rows[idx].cells
+                row[0].text = item.get('table_schema', '')
+                row[1].text = item.get('table_name', '')
+                row[2].text = item.get('index_name', '')
+                row[3].text = item.get('last_used', 'N/A')
+                row[4].text = str(item.get('days_unused', 0))
+                row[5].text = item.get('recommendation', '')
+                for j, cell in enumerate(row):
+                    for para in cell.paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(9)
+                    cell.width = col_w[j]
+            doc.add_paragraph()
+        if not missing and not redundant and not unused:
+            p = doc.add_paragraph(_t('report.index_health_no_issues'))
+        doc.add_paragraph()
+
     # ── 第25章 报告说明 ────────────────────────────────────────────────────
     _add_section(_t('report.notes_chapter'))
     notes = [
@@ -2657,6 +2817,40 @@ def single_inspection(args):
     except Exception as e:
         print(f"  \u26a0  慢查询深度分析失败: {e}")
 
+    # ── 4.7 配置基线检查（P3）────────────────────────────────────────────
+    config_baseline_result = None
+    try:
+        from config_baseline import check_oracle_config_baseline
+        print(f"\n[{GREEN}4.7/6{RESET}] {_t('oracle_cli_config_baseline_checking')}")
+        config_baseline_result = check_oracle_config_baseline(conn)
+        cb = config_baseline_result
+        summary = cb.get('summary', {})
+        crit = summary.get('critical_count', 0)
+        warn = summary.get('warning_count', 0)
+        info = summary.get('info_count', 0)
+        print(f"  \u2705  {_t('oracle_cli_config_baseline_ok') % (crit, warn, info)}")
+    except ImportError:
+        print(f"  \u26a0  config_baseline 模块未找到，跳过配置基线检查")
+    except Exception as e:
+        print(f"  \u26a0  配置基线检查失败: {e}")
+
+    # ── 4.8 索引健康分析（P3）────────────────────────────────────────────
+    index_health_result = None
+    try:
+        from index_health import analyze_oracle_indexes
+        print(f"\n[{GREEN}4.8/6{RESET}] {_t('oracle_cli_index_health_checking')}")
+        index_health_result = analyze_oracle_indexes(conn)
+        ih = index_health_result
+        sm = ih.get('summary', {})
+        miss = sm.get('missing_count', 0)
+        redun = sm.get('redundant_count', 0)
+        unused = sm.get('unused_count', 0)
+        print(f"  \u2705  {_t('oracle_cli_index_health_ok') % (miss, redun, unused)}")
+    except ImportError:
+        print(f"  \u26a0  index_health 模块未找到，跳过索引健康分析")
+    except Exception as e:
+        print(f"  \u26a0  索引健康分析失败: {e}")
+
     # ── 5. 生成报告 ────────────────────────────────────────────────────────
     print(f"\n[{GREEN}5/6{RESET}] {_t('oracle_log_gen_report')}")
     # 从 check_results 提取 db_info
@@ -2682,7 +2876,9 @@ def single_inspection(args):
 
     docx = build_word_report(db_info, os_data, check_results, version_str, ai_advice,
                               inspector=args.inspector or 'dbcheck', lang=_lang,
-                              desensitize=bool(getattr(args, 'desensitize', False)))
+                              desensitize=bool(getattr(args, 'desensitize', False)),
+                              config_baseline_result=config_baseline_result,
+                              index_health_result=index_health_result)
 
     # ── 6. 保存报告 ────────────────────────────────────────────────────────
     print(f"\n[{GREEN}6/6{RESET}] {_t('oracle_log_save_report')}")
@@ -2809,7 +3005,7 @@ def interactive_single_inspection():
         sid_or_svc = _input(f"{CYAN}{t('oracle_servicename')}{RESET}")
         sid, svc = None, sid_or_svc
     else:
-        sid     = _input(f"{CYAN}{t('oracle_sid')}{RESET}",       'ORCL')
+        sid     = _input(f"{CYAN}{t('oracle_sid')}{RESET}",       'orcl')
         svc     = None
     user        = _input(f"{CYAN}{t('oracle_username')}{RESET}",           'sys')
     password    = _password_input(f"{t('oracle_password')}: ")

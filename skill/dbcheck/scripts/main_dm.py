@@ -605,8 +605,8 @@ def create_word_template(inspector_name="Jack"):
     line_run.font.size = Pt(8)
     doc.add_paragraph("")
 
-    # 封面信息表
-    info_table = doc.add_table(rows=8, cols=2)
+    # 封面信息表（深蓝表头样式）
+    info_table = doc.add_table(rows=8, cols=2, style='Table Grid')
     info_cells = [
         (self._t('report.dm_fallback_db_name'),     "{{{ co_name }}}"),
         (self._t('report.dm_fallback_server_addr'), "{{{ server_addr }}}"),
@@ -617,10 +617,34 @@ def create_word_template(inspector_name="Jack"):
         (self._t('report.dm_fallback_platform'),   "{{{ platform_text }}}"),
         (self._t('report.dm_fallback_report_time'), "{{{ report_time }}}"),
     ]
+    # 表头行
+    _hdr = info_table.rows[0]
+    _hdr.cells[0].text = self._t('report.tbl_col_key')
+    _hdr.cells[1].text = self._t('report.tbl_col_val')
+    for c in _hdr.cells:
+        from docx.oxml.ns import nsdecls
+        from docx.oxml import parse_xml
+        shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="336699"/>')
+        c._tc.get_or_add_tcPr().append(shading)
+        for p in c.paragraphs:
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in p.runs:
+                run.font.color.rgb = RGBColor(255, 255, 255)
+                run.font.bold = True
+                run.font.size = Pt(10.5)
+    # 数据行
     for i, (label, value) in enumerate(info_cells):
-        info_table.cell(i, 0).text = label
-        info_table.cell(i, 1).text = value
-    info_table.style = 'Table Grid'
+        row = info_table.rows[i + 1]
+        row.cells[0].text = label
+        row.cells[1].text = value
+        for c in row.cells:
+            for p in c.paragraphs:
+                for run in p.runs:
+                    run.font.size = Pt(10.5)
+                    run.font.name = '微软雅黑'
+
+    # 分页符：封面独立一页
+    doc.add_page_break()
 
     # 章节占位符
     doc.add_paragraph("\n" + self._t("report.dm_ch1"), style='Heading1Custom')
@@ -677,6 +701,12 @@ class getData(object):
         self.ssh_info = ssh_info or {}
         self.conn_db = None
         self.context = {}
+        self._lang = 'zh'
+        try:
+            from i18n import get_lang
+            self._lang = get_lang()
+        except Exception:
+            self._lang = 'zh'
         self._connect()
 
     def _connect(self):
@@ -967,7 +997,7 @@ class getData(object):
         self.context['slow_query_result'] = None
         try:
             from slow_query_analyzer import DMSlowQueryAnalyzer
-            if self.conn:
+            if self.conn_db:
                 analyzer = DMSlowQueryAnalyzer()
                 ai_advisor = None
                 try:
@@ -986,18 +1016,54 @@ class getData(object):
                     )
                 except Exception:
                     pass
-                print("\n\U0001f50d " + self._t('dm8_slow_query_analyzing'))
-                result = analyzer.analyze(self.conn, ai_advisor=ai_advisor, lang=self._lang)
+                print("\n\U0001f50d " + _t('dm8_slow_query_analyzing'))
+                result = analyzer.analyze(self.conn_db, ai_advisor=ai_advisor, lang=self._lang)
                 self.context['slow_query_result'] = result.to_dict()
                 if result.is_empty():
-                    print("  \u2139\ufe0f  " + self._t('dm8_slow_query_unavailable'))
+                    print("  \u2139\ufe0f  " + _t('dm8_slow_query_unavailable'))
                 else:
-                    print("  \u2705  " + self._t('dm8_slow_query_ok').format(
+                    print("  \u2705  " + _t('dm8_slow_query_ok').format(
                         count=len(result.top_sql_by_latency)))
         except ImportError:
             pass
         except Exception as e:
             print("\u26a0\ufe0f 慢查询深度分析失败: %s" % e)
+
+        # ── 配置基线检查（P3）───────────────────────────────
+        self.context['config_baseline_result'] = None
+        try:
+            from config_baseline import check_dm_config_baseline
+            if self.conn_db:
+                print("\n\U0001f539 " + _t('dm8_cli_config_baseline_checking'))
+                cb_result = check_dm_config_baseline(self.conn_db)
+                self.context['config_baseline_result'] = cb_result
+                summary = cb_result.get('summary', {})
+                crit = summary.get('critical_count', 0)
+                warn = summary.get('warning_count', 0)
+                info = summary.get('info_count', 0)
+                print("  \u2705  " + _t('dm8_cli_config_baseline_ok') % (crit, warn, info))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("  \u26a0  配置基线检查失败: %s" % e)
+
+        # ── 索引健康分析（P3）───────────────────────────────
+        self.context['index_health_result'] = None
+        try:
+            from index_health import analyze_dm_indexes
+            if self.conn_db:
+                print("\n\U0001f50d " + _t('dm8_cli_index_health_checking'))
+                ih_result = analyze_dm_indexes(self.conn_db)
+                self.context['index_health_result'] = ih_result
+                sm = ih_result.get('summary', {})
+                miss = sm.get('missing_count', 0)
+                redun = sm.get('redundant_count', 0)
+                unused = sm.get('unused_count', 0)
+                print("  \u2705  " + _t('dm8_cli_index_health_ok') % (miss, redun, unused))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("  \u26a0  索引健康分析失败: %s" % e)
 
         self.print_progress_bar(total_steps, total_steps, prefix=_t('dm8_progress_prefix'), suffix=_t('dm8_progress_done'))
         return self.context
@@ -1334,11 +1400,11 @@ class saveDoc(object):
                     c.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
             return t
 
-        # 第14章 风险与建议
-        _add_heading(self._t('report.dm_ch14'))
+        # 第16章 风险与建议
+        _add_heading(self._t('report.dm_ch16'))
         issues = self.context.get("auto_analyze", [])
         if issues:
-            _add_heading(self._t('report.dm_ch14_1'), 2)
+            _add_heading(self._t('report.dm_ch16_1'), 2)
             _add_table([self._t('report.dm_col_seq'), self._t('report.dm_col_item'), self._t('report.dm_col_risk_level'),
                         self._t('report.dm_col_desc'), self._t('report.dm_col_severity'), self._t('report.dm_col_owner'),
                         self._t('report.dm_col_fix')],
@@ -1346,7 +1412,7 @@ class saveDoc(object):
                          x.get('col4',''), x.get('col5',''), x.get('fix_sql','')[:200]) for i,x in enumerate(issues)])
             fix_sqls = [(x.get('col1',''), x.get('fix_sql','')) for x in issues if x.get('fix_sql')]
             if fix_sqls:
-                _add_heading(self._t('report.dm_ch14_2'), 2)
+                _add_heading(self._t('report.dm_ch16_2'), 2)
                 for fname, sql in fix_sqls:
                     p = doc.add_paragraph(); p.add_run(f"【{fname}】").bold = True
                     doc.add_paragraph(sql, style='List Bullet')
@@ -1354,19 +1420,71 @@ class saveDoc(object):
             p = doc.add_paragraph(self._t('report.dm_no_risk_found'))
             for r in p.runs: r.font.size = Pt(10.5); r.font.name = '微软雅黑'
 
-        # 第15章 AI 诊断
+        # 第17章 AI 诊断建议（修复格式）
         ai_text = self.context.get('ai_advice', '')
         if ai_text:
-            _add_heading(self._t('report.dm_ch15'))
+            _add_heading(self._t('report.dm_ch17'))
+
+            # 辅助函数：将 Markdown **粗体** 转换为 Word 粗体
+            def _md(para, text):
+                parts = text.split('**')
+                for i, part in enumerate(parts):
+                    if not part:
+                        continue
+                    run = para.add_run(part)
+                    run.font.name = '微软雅黑'
+                    run.font.size = Pt(10.5)
+                    if i % 2 == 1:  # 奇数段为粗体
+                        run.bold = True
+
+            h2_counter = 0
+
             for line in ai_text.split('\n'):
-                if line.startswith('# '): _add_heading(line[2:], level=2)
-                elif line.startswith('## '): _add_heading(line[3:], level=3)
+                line = line.rstrip()
+                if not line:
+                    continue
+
+                # 跳过水平分割线 (---、***、___)
+                if re.match(r'^[-*_]{3,}$', line.strip()):
+                    continue
+
+                # ## 文字 -> 二级标题（17.1、17.2、17.3…）
+                if line.startswith('## ') and not line.startswith('### '):
+                    h2_counter += 1
+                    text = line[3:].strip()
+                    _add_heading(f"17.{h2_counter} {text}", level=2)
+                # # 文字（单#）-> 也作为二级标题
+                elif line.startswith('# ') and not line.startswith('## '):
+                    h2_counter += 1
+                    text = line[2:].strip()
+                    _add_heading(f"17.{h2_counter} {text}", level=2)
+                # ### 文字 -> 加粗段落（不是标题）
+                elif line.startswith('### '):
+                    text = line[4:].strip()
+                    p = doc.add_paragraph()
+                    _md(p, text)
+                # 编号列表：去掉原有编号，避免 Word 自动编号重复
+                elif re.match(r'^\d+(\.\d+)*\.?\s', line):
+                    text = re.sub(r'^\d+(\.\d+)*\.?\s*', '', line)
+                    p = doc.add_paragraph(style='List Number')
+                    _md(p, text)
+                # 无序列表
                 elif line.startswith('- ') or line.startswith('* '):
-                    doc.add_paragraph(line[2:], style='List Bullet')
-                elif re.match(r'^\d+\.', line):
-                    doc.add_paragraph(line, style='List Number')
+                    text = line[2:].strip()
+                    if '：' in text:
+                        # 含冒号：用 _md() 处理整行，冒号前内容自动加粗（通过 **标记）
+                        p = doc.add_paragraph(style='List Bullet')
+                        _md(p, text)
+                    else:
+                        # 无冒号纯标签（如"**问题定位**"、"**原因分析**"）：
+                        # 通过 _md() 转换 Markdown 粗体为 Word 粗体
+                        p = doc.add_paragraph(style='List Bullet')
+                        _md(p, text)
+                # 普通段落
                 elif line.strip():
-                    doc.add_paragraph(line)
+                    p = doc.add_paragraph()
+                    _md(p, line.strip())
+
             next_chap = 12
             notes_chapter = self._t('report.dm_notes_chapter_ai')
         else:
@@ -1475,15 +1593,43 @@ class saveDoc(object):
 
         try:
             doc = Document()
-            doc.add_paragraph(self._t("report.dm_title"),
-                              style=doc.styles.add_style('ReportTitle', 1))
-            doc.styles['ReportTitle'].font.size = Pt(22)
-            doc.styles['ReportTitle'].font.bold = True
-            doc.styles['ReportTitle'].font.name = '微软雅黑'
-            doc.styles['ReportTitle'].font.color.rgb = RGBColor(0, 51, 102)
-            doc.add_paragraph("")
 
-            # 封面信息表
+            # ── 封面（参照 Oracle 风格） ──────────────────────────────────
+            # Logo 图片
+            _logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dbcheck_logo.png')
+            if os.path.exists(_logo_path):
+                _logo_para = doc.add_paragraph()
+                _logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                _logo_run = _logo_para.add_run()
+                _logo_run.add_picture(_logo_path, width=Cm(3.5))
+
+            # 报告标题
+            _title_p = doc.add_paragraph()
+            _title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _title_run = _title_p.add_run('DM8 ' + self._t('report.dm_fallback_health_report'))
+            _title_run.font.size = Pt(28)
+            _title_run.font.bold = True
+            _title_run.font.color.rgb = RGBColor(15, 75, 135)
+            _title_run.font.name = '微软雅黑'
+
+            # 英文副标题
+            _sub_p = doc.add_paragraph()
+            _sub_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _sub_run = _sub_p.add_run('Database Health Inspection Report')
+            _sub_run.font.size = Pt(14)
+            _sub_run.font.color.rgb = RGBColor(100, 100, 100)
+            _sub_run.font.italic = True
+
+            # 装饰分隔线
+            doc.add_paragraph()
+            _line_p = doc.add_paragraph()
+            _line_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _line_run = _line_p.add_run('━' * 50)
+            _line_run.font.color.rgb = RGBColor(15, 75, 135)
+            _line_run.font.size = Pt(8)
+            doc.add_paragraph()
+
+            # ── 封面信息表（深蓝表头样式） ─────────────────────────────────
             ctx = self.context
 
             def _v(key, sub_key=None):
@@ -1492,7 +1638,7 @@ class saveDoc(object):
                     val = val[0].get(sub_key, '') if sub_key else str(val[0])
                 return str(val) if val else 'N/A'
 
-            info_items = [
+            _info_items = [
                 (self._t('report.dm_fallback_db_name'),   _v('co_name', 'DB_NAME')),
                 (self._t('report.dm_fallback_server_addr'),  _v('server_addr')),
                 (self._t('report.dm_fallback_version'),    _v('dm_version', 'BANNER')),
@@ -1502,14 +1648,11 @@ class saveDoc(object):
                 (self._t('report.dm_fallback_platform'),  _v('platform_text')),
                 (self._t('report.dm_fallback_report_time'), _v('report_time')),
             ]
-            t_info = doc.add_table(rows=len(info_items), cols=2, style='Table Grid')
-            for i, (k, v) in enumerate(info_items):
-                t_info.cell(i, 0).text = k; _set_cell_bg(t_info.cell(i, 0), 'F2F2F2')
-                t_info.cell(i, 1).text = ' '.join(str(v).split())
-                for cell in [t_info.cell(i, 0), t_info.cell(i, 1)]:
-                    for p in cell.paragraphs:
-                        for run in p.runs:
-                            run.font.size = Pt(10.5); run.font.name = '微软雅黑'
+            _tbl([self._t('report.tbl_col_key'), self._t('report.tbl_col_val')], _info_items)
+
+            # 分页符：封面独立一页
+            from docx.enum.section import WD_SECTION_START
+            doc.add_page_break()
 
 # Ch1 基本信息
             _add_heading(self._t("report.dm_ch1"))
@@ -1605,8 +1748,168 @@ class saveDoc(object):
             # 第12章 Undo 信息
             _add_heading(self._t("report.dm_ch12")); _render('dm_undo_info', 30)
 
-            # 第13章 等待事件统计
+# 第13章 等待事件统计
             _add_heading(self._t("report.dm_ch13")); _render('dm_wait_class', 30)
+
+            # 第14章 配置基线检查（P3）
+            cb_result = self.context.get('config_baseline_result')
+            if cb_result:
+                _add_heading(self._t('report.dm_ch14'))
+                db_size = cb_result.get('db_size_gb', 0)
+                total_mem = cb_result.get('total_memory_gb', 0)
+                p = doc.add_paragraph()
+                p.add_run("数据库规模: %.2f GB | 主机内存: %.1f GB" % (db_size, total_mem)).italic = True
+                doc.add_paragraph()
+                summary = cb_result.get('summary', {})
+                crit = summary.get('critical_count', 0)
+                warn = summary.get('warning_count', 0)
+                info = summary.get('info_count', 0)
+                p = doc.add_paragraph()
+                p.add_run(self._t('report.config_baseline_summary').format(critical=crit, warning=warn, info=info))
+                items = cb_result.get('items', [])
+                if items:
+                    col_w = [Cm(3.0), Cm(2.5), Cm(2.5), Cm(2.5), Cm(5.5)]
+                    tbl = doc.add_table(rows=1+len(items), cols=5)
+                    tbl.style = 'Table Grid'
+                    hdrs = [self._t('report.col_param'), self._t('report.col_current'),
+                            self._t('report.col_recommended'), self._t('report.col_gap'),
+                            self._t('report.col_desc')]
+                    for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                        cell.text = ht
+                        _set_cell_bg(cell, '336699')
+                        cell.paragraphs[0].runs[0].bold = True
+                        cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        cell.width = col_w[j]
+                    for idx, item in enumerate(items, 1):
+                        row = tbl.rows[idx].cells
+                        row[0].text = item.get('param', '')
+                        row[1].text = item.get('current', '')
+                        row[2].text = item.get('recommended', '')
+                        row[3].text = item.get('gap', '')
+                        row[4].text = item.get('description', '')
+                        sev = item.get('severity', 'info')
+                        cm = {'critical': RGBColor(0xC0,0x00,0x00), 'warning': RGBColor(0xFF,0x78,0x00), 'info': RGBColor(0x37,0x86,0x10)}
+                        if sev in cm:
+                            for cell in row:
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.color.rgb = cm[sev]
+                                        break
+                                break
+                        for j, cell in enumerate(row):
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.size = Pt(9)
+                            cell.width = col_w[j]
+                else:
+                    doc.add_paragraph(self._t('report.config_baseline_no_issues'))
+                doc.add_paragraph()
+
+            # 第15章 索引健康分析（P3）
+            ih_result = self.context.get('index_health_result')
+            if ih_result:
+                _add_heading(self._t('report.dm_ch15'))
+                summary = ih_result.get('summary', {})
+                db_size = summary.get('db_size_gb', 0)
+                total_idx = summary.get('total_indexes', 0)
+                p = doc.add_paragraph()
+                p.add_run("数据库大小: %.2f GB | 总索引数: %d" % (db_size, total_idx)).italic = True
+                doc.add_paragraph()
+                missing = ih_result.get('missing_indexes', [])
+                redundant = ih_result.get('redundant_indexes', [])
+                unused = ih_result.get('unused_indexes', [])
+                if missing:
+                    _add_heading(self._t('report.index_missing_sub'), 2)
+                    col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                    tbl = doc.add_table(rows=1+len(missing), cols=5)
+                    tbl.style = 'Table Grid'
+                    hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                            self._t('report.col_column'), self._t('report.col_select_count'),
+                            self._t('report.col_recommendation')]
+                    for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                        cell.text = ht
+                        _set_cell_bg(cell, '993333')
+                        cell.paragraphs[0].runs[0].bold = True
+                        cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        cell.width = col_w[j]
+                    for idx, item in enumerate(missing, 1):
+                        row = tbl.rows[idx].cells
+                        row[0].text = item.get('table_schema', '')
+                        row[1].text = item.get('table_name', '')
+                        row[2].text = item.get('column_name', '')
+                        row[3].text = str(item.get('select_count', 0))
+                        row[4].text = item.get('recommendation', '')
+                        for j, cell in enumerate(row):
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.size = Pt(9)
+                            cell.width = col_w[j]
+                    doc.add_paragraph()
+                if redundant:
+                    _add_heading(self._t('report.index_redundant_sub'), 2)
+                    col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                    tbl = doc.add_table(rows=1+len(redundant), cols=5)
+                    tbl.style = 'Table Grid'
+                    hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                            'Index 1', 'Index 2', self._t('report.col_recommendation')]
+                    for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                        cell.text = ht
+                        _set_cell_bg(cell, '996633')
+                        cell.paragraphs[0].runs[0].bold = True
+                        cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        cell.width = col_w[j]
+                    for idx, item in enumerate(redundant, 1):
+                        row = tbl.rows[idx].cells
+                        row[0].text = item.get('table_schema', '')
+                        row[1].text = item.get('table_name', '')
+                        row[2].text = item.get('index1', '')
+                        row[3].text = item.get('index2', '')
+                        row[4].text = item.get('recommendation', '')
+                        for j, cell in enumerate(row):
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.size = Pt(9)
+                            cell.width = col_w[j]
+                    doc.add_paragraph()
+                if unused:
+                    _add_heading(self._t('report.index_unused_sub'), 2)
+                    col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.0), Cm(2.0), Cm(4.5)]
+                    tbl = doc.add_table(rows=1+len(unused), cols=6)
+                    tbl.style = 'Table Grid'
+                    hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                            self._t('report.col_index'), self._t('report.col_last_used'),
+                            self._t('report.col_days_unused'), self._t('report.col_recommendation')]
+                    for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                        cell.text = ht
+                        _set_cell_bg(cell, '669933')
+                        cell.paragraphs[0].runs[0].bold = True
+                        cell.paragraphs[0].runs[0].font.size = Pt(9)
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        cell.width = col_w[j]
+                    for idx, item in enumerate(unused, 1):
+                        row = tbl.rows[idx].cells
+                        row[0].text = item.get('table_schema', '')
+                        row[1].text = item.get('table_name', '')
+                        row[2].text = item.get('index_name', '')
+                        row[3].text = item.get('last_used', 'N/A')
+                        row[4].text = str(item.get('days_unused', 0))
+                        row[5].text = item.get('recommendation', '')
+                        for j, cell in enumerate(row):
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.size = Pt(9)
+                            cell.width = col_w[j]
+                    doc.add_paragraph()
+                if not missing and not redundant and not unused:
+                    doc.add_paragraph(self._t('report.index_health_no_issues'))
+                doc.add_paragraph()
 
             self._append_chapters(doc)
             doc.save(self.ofile)

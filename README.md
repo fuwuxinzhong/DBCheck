@@ -145,6 +145,143 @@ Each risk is presented as a card: **Risk Level (High/Medium/Low) → Issue Descr
 | DM8 Buffer Pool Details | — | — | — | — | ✅ | — |
 | Placement & Affinity Policy | — | — | — | — | — | ✅ |
 
+### Configuration Baseline Checks
+
+> Automatically compares current configuration values against recommended baselines based on database size, memory, and workload — helping identify misconfigurations before they cause problems.
+
+#### MySQL (22 parameters)
+
+| Parameter | Description | Recommended Value Basis |
+|-----------|-------------|------------------------|
+| innodb_buffer_pool_size | InnoDB buffer pool size | 60–80% of total memory |
+| max_connections | Maximum connections | 1.5× historical peak usage |
+| tmp_table_size / max_heap_table_size | Temp & memory table size | 64MB; should match each other |
+| innodb_log_file_size | Redo log file size | 256MB–1GB based on DB size |
+| innodb_log_buffer_size | Log buffer size | 16MB |
+| sync_binlog | Binlog sync frequency | 1 for high-write workloads |
+| innodb_flush_log_at_trx_commit | Transaction log flush policy | 1 (strictest, safest) |
+| table_open_cache / table_definition_cache | Table & definition cache | 2× table count / threads |
+| thread_cache_size | Thread cache size | 50+ or 2–4× CPU cores |
+| innodb_thread_concurrency | InnoDB concurrency | 2× CPU cores |
+| innodb_io_capacity / io_capacity_max | I/O capacity (SSD/HDD) | 20000 / 200 |
+| max_allowed_packet | Max packet size | 16MB–64MB |
+| wait_timeout / interactive_timeout | Connection idle timeout | 300–600 seconds |
+| sort_buffer_size / join_buffer_size | Sort & join buffer | 2–4MB / 1–2MB |
+| long_query_time | Slow query threshold | 1–2 seconds |
+
+#### PostgreSQL (21 parameters)
+
+| Parameter | Description | Recommended Value Basis |
+|-----------|-------------|------------------------|
+| shared_buffers | Shared buffer size | 25% of total memory |
+| effective_cache_size | Effective cache size | 75% of total memory |
+| maintenance_work_mem | Maintenance memory | 256MB–1GB |
+| work_mem | Work memory | (total_mem × 0.25) / max_connections |
+| max_connections | Maximum connections | 200–1000 |
+| temp_buffers / wal_buffers | Temp & WAL buffers | 8MB / 16MB |
+| checkpoint_completion_target | Checkpoint completion target | 0.9 |
+| max_wal_size / min_wal_size | WAL size bounds | 2GB / 256MB |
+| random_page_cost | Random page cost | 1.1 (SSD) / 4.0 (HDD) |
+| effective_io_concurrency | I/O concurrency | 200 (SSD) |
+| shared_preload_libraries | Preloaded libraries | Should include pg_stat_statements |
+| track_activities / track_counts | Statistics tracking | on |
+| track_io_timing / track_functions | I/O & function tracking | on / pl |
+| autovacuum | Auto vacuum | on |
+| log_min_duration_statement | Slow query threshold | 1000–3000ms |
+
+#### Oracle (12 parameters)
+
+| Parameter | Description | Recommended Value Basis |
+|-----------|-------------|------------------------|
+| memory_target | Memory target (SGA+PGA) | 85% of physical memory |
+| sga_target / pga_aggregate_target | SGA / PGA targets | 60% / 25% of total memory |
+| processes | Maximum processes | 150 or CPU cores × 50 |
+| open_cursors / session_cached_cursors | Cursor settings | 300–500 / 50 |
+| log_buffer | Log buffer size | 8–64MB |
+| undo_retention | Undo retention time | 3600 seconds |
+| fast_start_mttr_target | MTTR target | 300 seconds |
+| db_file_multiblock_read_count | Multiblock read count | 128 |
+| statistics_level | Statistics level | TYPICAL |
+| control_file_record_keep_time | Control file record retention | 7 days |
+
+#### SQL Server (6 parameters)
+
+| Parameter | Description | Recommended Value Basis |
+|-----------|-------------|------------------------|
+| max server memory (MB) | Max server memory | 85% of physical memory |
+| cost threshold for parallelism | Parallelism cost threshold | 25–50 |
+| max degree of parallelism | Max DOP | CPU cores / 2 |
+| fill factor (%) | Fill factor | 80–90% |
+| recovery interval (min) | Recovery interval | 60 minutes |
+| backup compression default | Backup compression | 1 (enabled) |
+
+#### DM8 (7 parameters)
+
+| Parameter | Description | Recommended Value Basis |
+|-----------|-------------|------------------------|
+| MEMORY_TARGET | Memory target | 85% of physical memory |
+| SGA_TARGET / PGA_TARGET | SGA / PGA targets | 60% / 25% of total memory |
+| MAX_SESSIONS / OPEN_CURSORS | Session & cursor limits | 1000 / 500 |
+| UNDO_RETENTION | Undo retention time | 3600 seconds |
+| BUFFER | Buffer pool size | 30% of DB size |
+
+#### TiDB (9 parameters)
+
+| Parameter | Description | Recommended Value Basis |
+|-----------|-------------|------------------------|
+| innodb_buffer_pool_size | InnoDB buffer pool size | 70% of total memory |
+| max_connections | Maximum connections | 3000 |
+| tmp_table_size / max_heap_table_size | Temp & memory table size | 256MB; should match |
+| innodb_log_file_size / innodb_log_buffer_size | Log file & buffer | 256MB / 64MB |
+| max_allowed_packet | Max packet size | 64MB |
+| tidb_hash_join_concurrency / tidb_index_lookup_concurrency | Operator concurrency | 5 each |
+
+### Index Health Analysis
+
+> Detects three types of index issues across all supported databases — missing indexes, redundant/duplicate indexes, and long-unused indexes — then generates actionable remediation recommendations.
+
+#### MySQL
+
+| Analysis Type | Data Source | Description |
+|---------------|-------------|-------------|
+| Missing indexes | performance_schema.events_statements_summary_by_digest + table_statistics | Identifies high-scan queries and tables lacking primary keys |
+| Redundant indexes | information_schema.STATISTICS | Finds duplicate indexes on the same column(s) |
+| Unused indexes | performance_schema.table_statistics | Detects indexes with zero read/write activity |
+
+#### PostgreSQL
+
+| Analysis Type | Data Source | Description |
+|---------------|-------------|-------------|
+| Missing indexes | pg_stat_statements | Identifies high-row-scan queries needing indexes |
+| Redundant indexes | pg_indexes (indexdef parsing) | Finds identical or left-prefix-matching index pairs |
+| Unused indexes | pg_stat_user_indexes (idx_scan=0) | Detects never-scanned indexes |
+
+#### Oracle
+
+| Analysis Type | Data Source | Description |
+|---------------|-------------|-------------|
+| Unused indexes | v$object_usage (MONITORING USAGE) | Detects indexes that have never been used |
+| Redundant indexes | dba_ind_columns | Finds same-column-at-position-1 index pairs |
+
+#### SQL Server
+
+| Analysis Type | Data Source | Description |
+|---------------|-------------|-------------|
+| Unused indexes | sys.dm_db_index_usage_stats | Detects indexes with zero user_seeks + user_scans |
+| Redundant indexes | sys.indexes + sys.index_columns | Finds same-leading-column index pairs |
+
+#### DM8
+
+| Analysis Type | Data Source | Description |
+|---------------|-------------|-------------|
+| Redundant indexes | USER_IND_COLUMNS | Finds identical or containing column index pairs |
+
+#### TiDB
+
+| Analysis Type | Data Source | Description |
+|---------------|-------------|-------------|
+| Redundant indexes | information_schema.STATISTICS | Finds identical or left-prefix-matching index pairs |
+
 ### System Resource Monitoring
 
 - **CPU**: utilization, core count, clock speed

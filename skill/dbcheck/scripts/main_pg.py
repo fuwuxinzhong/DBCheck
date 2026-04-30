@@ -603,6 +603,9 @@ class WordTemplateGenerator:
             'ch6':             self._t('report.pg_ch6'),
             'ch7':             self._t('report.pg_ch7'),
             'ch8':             self._t('report.pg_ch8'),
+            'ch9':             self._t('report.config_baseline_chapter'),
+            'ch10':            self._t('report.index_health_chapter'),
+            'ch11':            self._t('report.fallback_pg_notes_chapter'),
             # Table headers
             'hdr_config':      self._t('report.pg_hdr_config_item'),
             'hdr_cur_val':     self._t('report.pg_hdr_current_value'),
@@ -684,6 +687,31 @@ class WordTemplateGenerator:
         except Exception:
             return key
 
+    def _set_cell_bg(self, cell, hex_color):
+        from docx.oxml.ns import nsdecls
+        from docx.oxml import parse_xml
+        try:
+            shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
+            cell._tc.get_or_add_tcPr().append(shading)
+        except Exception:
+            pass
+
+    def _style_header_cell(self, cell, text):
+        """设置表头单元格：先设文本，再应用蓝底白字加粗居中样式"""
+        cell.text = text
+        self._set_cell_bg(cell, '336699')
+        for para in cell.paragraphs:
+            for run in para.runs:
+                run.bold = True
+                run.font.color.rgb = RGBColor(255, 255, 255)
+                run.font.size = Pt(10)
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    def _style_header_cells(self, cells, *args):
+        """批量设置表头单元格样式，args 为各单元格的文本"""
+        for cell, text in zip(cells, args):
+            self._style_header_cell(cell, text)
+
     def _setup_document(self):
         """
         设置 Word 文档的页面边距。
@@ -699,11 +727,12 @@ class WordTemplateGenerator:
 
     def create_template(self):
         """
-        按顺序组装完整的巡检报告模板，包含封面及 7 个章节。
+        按顺序组装完整的巡检报告模板，包含封面及 11 个章节。
 
         依次调用以下方法：
           封面 → 健康状态概览 → 系统资源检查 → PostgreSQL 配置检查
-          → 性能分析 → 数据库信息 → 安全信息 → 报告说明
+          → 性能分析 → 数据库信息 → 安全信息 → 风险与建议
+          → AI 智能诊断 → 配置基线检查 → 索引健康分析 → 报告说明
 
         :return: 组装完成的 Document 对象
         """
@@ -714,6 +743,10 @@ class WordTemplateGenerator:
         self._add_performance_section()
         self._add_database_info_section()
         self._add_security_section()
+        self._add_risk_section()
+        self._add_ai_section()
+        self._add_config_baseline_section()
+        self._add_index_health_section()
         self._add_notes_section()
         return self.doc
 
@@ -837,18 +870,17 @@ class WordTemplateGenerator:
         heading_run.font.bold = True
         table = self.doc.add_table(rows=2, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(4)
-        table.columns[1].width = Cm(10)
-        cells = table.rows[0].cells
-        cells[0].text = self._l['overall_health']
-        cells[1].text = "{{ health_status }}"
+        table.autofit = True
+        # 表头行样式：先设文本，再应用样式
+        hdr_cells = table.rows[0].cells
+        self._style_header_cell(hdr_cells[0], self._l['overall_health'])
+        self._style_header_cell(hdr_cells[1], "{{ health_status }}")
         cells = table.rows[1].cells
         cells[0].text = self._l['issue_count']
         cells[1].text = "{{ problem_count }} 个"
         for row in table.rows:
             for cell in row.cells:
-                cell.paragraphs[0].runs[0].font.size = Pt(11)
+                cell.paragraphs[0].runs[0].font.size = Pt(10)
                 cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         self.doc.add_paragraph()
         p = self.doc.add_paragraph(self._t('report.fallback_health_summary') + ": ")
@@ -876,10 +908,10 @@ class WordTemplateGenerator:
         table.style = 'Table Grid'
         table.autofit = True  # 根据窗口自动调整
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = self._l['hdr_cpu_usage']
-        hdr_cells[1].text = self._l['hdr_physical']
-        hdr_cells[2].text = self._l['hdr_logical']
-        hdr_cells[3].text = self._l['hdr_freq']
+        self._style_header_cell(hdr_cells[0], self._l['hdr_cpu_usage'])
+        self._style_header_cell(hdr_cells[1], self._l['hdr_physical'])
+        self._style_header_cell(hdr_cells[2], self._l['hdr_logical'])
+        self._style_header_cell(hdr_cells[3], self._l['hdr_freq'])
         na = self._l['na']
         data_cells = table.rows[1].cells
         data_cells[0].text = "{% if system_info.cpu and system_info.cpu.usage_percent is defined %}{{ '%.2f'|format(system_info.cpu.usage_percent) }}%{% else %}" + na + "{% endif %}"
@@ -902,10 +934,10 @@ class WordTemplateGenerator:
         table.style = 'Table Grid'
         table.autofit = True  # 根据窗口自动调整
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = self._l['hdr_total_mem']
-        hdr_cells[1].text = self._l['hdr_used_mem']
-        hdr_cells[2].text = self._l['hdr_avail_mem']
-        hdr_cells[3].text = self._l['hdr_mem_usage']
+        self._style_header_cell(hdr_cells[0], self._l['hdr_total_mem'])
+        self._style_header_cell(hdr_cells[1], self._l['hdr_used_mem'])
+        self._style_header_cell(hdr_cells[2], self._l['hdr_avail_mem'])
+        self._style_header_cell(hdr_cells[3], self._l['hdr_mem_usage'])
         data_cells = table.rows[1].cells
         data_cells[0].text = "{% if system_info.memory and system_info.memory.total_gb is defined %}{{ '%.2f'|format(system_info.memory.total_gb) }}{% else %}" + na + "{% endif %}"
         data_cells[1].text = "{% if system_info.memory and system_info.memory.used_gb is defined %}{{ '%.2f'|format(system_info.memory.used_gb) }}{% else %}" + na + "{% endif %}"
@@ -928,14 +960,8 @@ class WordTemplateGenerator:
         table.autofit = True  # 根据窗口自动调整
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = self._l['hdr_mountpoint']
-        hdr_cells[1].text = self._l['hdr_disk_usage']
-        for cell in hdr_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.size = Pt(10)
-                    run.font.bold = True
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._style_header_cell(hdr_cells[0], self._l['hdr_mountpoint'])
+        self._style_header_cell(hdr_cells[1], self._l['hdr_disk_usage'])
         row_cells = table.add_row().cells
         row_cells[0].text = "{% for disk in system_info.disk_list %}{{ disk.mountpoint }}{% if not loop.last %}\n{% endif %}{% endfor %}"
         row_cells[1].text = "{% for disk in system_info.disk_list %}{% if disk.usage_percent is defined %}{{ '%.2f'|format(disk.usage_percent) }}%{% else %}" + na + "{% endif %}{% if not loop.last %}\n{% endif %}{% endfor %}"
@@ -965,14 +991,11 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=5, cols=3)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(4)
-        table.columns[1].width = Cm(4)
-        table.columns[2].width = Cm(6)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._l['hdr_config']
-        hdr[1].text = self._l['hdr_cur_val']
-        hdr[2].text = self._l['hdr_desc']
+        self._style_header_cell(hdr[0], self._l['hdr_config'])
+        self._style_header_cell(hdr[1], self._l['hdr_cur_val'])
+        self._style_header_cell(hdr[2], self._l['hdr_desc'])
         conn_items = [
             ('max_connections',     self._l['max_conn'],        self._l['max_conn_desc']),
             ('shared_buffers',     self._l['shared_buf'],      self._l['shared_buf_desc']),
@@ -997,14 +1020,11 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=6, cols=3)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(4)
-        table.columns[1].width = Cm(4)
-        table.columns[2].width = Cm(6)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._l['hdr_config']
-        hdr[1].text = self._l['hdr_cur_val']
-        hdr[2].text = self._l['hdr_desc']
+        self._style_header_cell(hdr[0], self._l['hdr_config'])
+        self._style_header_cell(hdr[1], self._l['hdr_cur_val'])
+        self._style_header_cell(hdr[2], self._l['hdr_desc'])
         mem_items = [
             ('maintenance_work_mem',        self._l['maint_mem'],          self._l['maint_mem_desc']),
             ('wal_level',                   self._l['wal_level'],          self._l['wal_level_desc']),
@@ -1030,14 +1050,11 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=5, cols=3)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(4)
-        table.columns[1].width = Cm(4)
-        table.columns[2].width = Cm(6)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._l['hdr_config']
-        hdr[1].text = self._l['hdr_cur_val']
-        hdr[2].text = self._l['hdr_desc']
+        self._style_header_cell(hdr[0], self._l['hdr_config'])
+        self._style_header_cell(hdr[1], self._l['hdr_cur_val'])
+        self._style_header_cell(hdr[2], self._l['hdr_desc'])
         other_items = [
             ('autovacuum',                       self._l['autovacuum'],          self._l['autovacuum_desc']),
             ('autovacuum_vacuum_scale_factor',   self._l['vacuum_factor'],        self._l['vacuum_factor_desc']),
@@ -1075,12 +1092,10 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=4, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(4)
-        table.columns[1].width = Cm(10)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._l['hdr_metric']
-        hdr[1].text = self._l['hdr_value']
+        self._style_header_cell(hdr[0], self._l['hdr_metric'])
+        self._style_header_cell(hdr[1], self._l['hdr_value'])
         conn_data = [
             (self._l['cur_conn'], "{% if pg_connections and pg_connections[0] %}{{ pg_connections[0]['total_connections'] }}{% endif %}"),
             (self._l['max_conn_hdr'], "{% if pg_connections and pg_connections[0] %}{{ pg_connections[0]['max_connections'] }}{% endif %}"),
@@ -1103,18 +1118,10 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=2)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(4)
-        table.columns[1].width = Cm(4)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._l['hdr_state']
-        hdr[1].text = self._l['hdr_conn_cnt']
-        for cell in hdr:
-            for p in cell.paragraphs:
-                for r in p.runs:
-                    r.font.size = Pt(10)
-                    r.font.bold = True
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._style_header_cell(hdr[0], self._l['hdr_state'])
+        self._style_header_cell(hdr[1], self._l['hdr_conn_cnt'])
         for i in range(8):
             row_cells = table.add_row().cells
             state_tpl = "{{{{ pg_conn_detail[{}].state if pg_conn_detail and pg_conn_detail[{}] else '' }}}}".format(i, i)
@@ -1134,24 +1141,13 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(3)
-        table.columns[1].width = Cm(2)
-        table.columns[2].width = Cm(2)
-        table.columns[3].width = Cm(2)
-        table.columns[4].width = Cm(5)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._l['hdr_db']
-        hdr[1].text = self._l['blks_hit']
-        hdr[2].text = self._l['blks_read']
-        hdr[3].text = self._l['hit_ratio']
-        hdr[4].text = self._l['hdr_desc']
-        for cell in hdr:
-            for p in cell.paragraphs:
-                for r in p.runs:
-                    r.font.size = Pt(10)
-                    r.font.bold = True
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._style_header_cell(hdr[0], self._l['hdr_db'])
+        self._style_header_cell(hdr[1], self._l['blks_hit'])
+        self._style_header_cell(hdr[2], self._l['blks_read'])
+        self._style_header_cell(hdr[3], self._l['hit_ratio'])
+        self._style_header_cell(hdr[4], self._l['hdr_desc'])
         for i in range(8):
             row_cells = table.add_row().cells
             db_tpl = "{{{{ pg_cache_hit[{}].datname if pg_cache_hit and pg_cache_hit[{}] else '' }}}}".format(i, i)
@@ -1177,20 +1173,11 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=3)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(4)
-        table.columns[1].width = Cm(4)
-        table.columns[2].width = Cm(6)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._l['hdr_db']
-        hdr[1].text = self._l['hdr_size']
-        hdr[2].text = self._t('report.pg_fallback_pg_size_bytes')
-        for cell in hdr:
-            for p in cell.paragraphs:
-                for r in p.runs:
-                    r.font.size = Pt(10)
-                    r.font.bold = True
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._style_header_cell(hdr[0], self._l['hdr_db'])
+        self._style_header_cell(hdr[1], self._l['hdr_size'])
+        self._style_header_cell(hdr[2], self._t('report.pg_fallback_pg_size_bytes'))
         for i in range(8):
             row_cells = table.add_row().cells
             name_tpl = "{{{{ pg_db_size[{}].database_name if pg_db_size and pg_db_size[{}] else '' }}}}".format(i, i)
@@ -1199,6 +1186,11 @@ class WordTemplateGenerator:
             row_cells[0].text = name_tpl
             row_cells[1].text = size_tpl
             row_cells[2].text = bytes_tpl
+            for cell in row_cells:
+                for p in cell.paragraphs:
+                    for r in p.runs:
+                        r.font.size = Pt(10)
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             for cell in row_cells:
                 for p in cell.paragraphs:
                     for r in p.runs:
@@ -1224,24 +1216,13 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(3)
-        table.columns[1].width = Cm(2)
-        table.columns[2].width = Cm(2)
-        table.columns[3].width = Cm(2)
-        table.columns[4].width = Cm(5)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._l['hdr_db']
-        hdr[1].text = self._t('report.pg_encoding')
-        hdr[2].text = self._t('report.pg_collation')
-        hdr[3].text = self._t('report.pg_allow_conn')
-        hdr[4].text = self._t('report.pg_conn_limit')
-        for cell in hdr:
-            for p in cell.paragraphs:
-                for r in p.runs:
-                    r.font.size = Pt(10)
-                    r.font.bold = True
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._style_header_cell(hdr[0], self._l['hdr_db'])
+        self._style_header_cell(hdr[1], self._t('report.pg_encoding'))
+        self._style_header_cell(hdr[2], self._t('report.pg_collation'))
+        self._style_header_cell(hdr[3], self._t('report.pg_allow_conn'))
+        self._style_header_cell(hdr[4], self._t('report.pg_conn_limit'))
         for i in range(10):
             row_cells = table.add_row().cells
             row_cells[0].text = "{{{{ pg_databases[{}].datname if pg_databases and pg_databases[{}] else '' }}}}".format(i, i)
@@ -1262,24 +1243,13 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(1.5)
-        table.columns[1].width = Cm(2)
-        table.columns[2].width = Cm(2.5)
-        table.columns[3].width = Cm(2)
-        table.columns[4].width = Cm(6)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = 'PID'
-        hdr[1].text = self._l['hdr_user']
-        hdr[2].text = self._l['hdr_db']
-        hdr[3].text = self._l['hdr_state']
-        hdr[4].text = self._t('report.pg_current_sql')
-        for cell in hdr:
-            for p in cell.paragraphs:
-                for r in p.runs:
-                    r.font.size = Pt(9)
-                    r.font.bold = True
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._style_header_cell(hdr[0], 'PID')
+        self._style_header_cell(hdr[1], self._l['hdr_user'])
+        self._style_header_cell(hdr[2], self._l['hdr_db'])
+        self._style_header_cell(hdr[3], self._l['hdr_state'])
+        self._style_header_cell(hdr[4], self._t('report.pg_current_sql'))
         for i in range(15):
             row_cells = table.add_row().cells
             row_cells[0].text = "{{{{ pg_processlist[{}].pid if pg_processlist and pg_processlist[{}] else '' }}}}".format(i, i)
@@ -1290,7 +1260,7 @@ class WordTemplateGenerator:
             for cell in row_cells:
                 for p in cell.paragraphs:
                     for r in p.runs:
-                        r.font.size = Pt(9)
+                        r.font.size = Pt(10)
                     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         self.doc.add_paragraph()
 
@@ -1300,20 +1270,11 @@ class WordTemplateGenerator:
         sub_heading.runs[0].font.bold = True
         table = self.doc.add_table(rows=1, cols=3)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(4)
-        table.columns[1].width = Cm(3)
-        table.columns[2].width = Cm(7)
+        table.autofit = True
         hdr = table.rows[0].cells
-        hdr[0].text = self._t('report.pg_extension_name')
-        hdr[1].text = self._t('report.pg_ext_version')
-        hdr[2].text = self._l['hdr_desc']
-        for cell in hdr:
-            for p in cell.paragraphs:
-                for r in p.runs:
-                    r.font.size = Pt(10)
-                    r.font.bold = True
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._style_header_cell(hdr[0], self._t('report.pg_extension_name'))
+        self._style_header_cell(hdr[1], self._t('report.pg_ext_version'))
+        self._style_header_cell(hdr[2], self._l['hdr_desc'])
         for i in range(10):
             row_cells = table.add_row().cells
             row_cells[0].text = "{{{{ pg_extensions[{}].name if pg_extensions and pg_extensions[{}] else '' }}}}".format(i, i)
@@ -1342,24 +1303,13 @@ class WordTemplateGenerator:
         sub_heading_run.font.bold = True
         table = self.doc.add_table(rows=1, cols=5)
         table.style = 'Table Grid'
-        table.autofit = False
-        table.columns[0].width = Cm(3)
-        table.columns[1].width = Cm(2)
-        table.columns[2].width = Cm(2)
-        table.columns[3].width = Cm(2)
-        table.columns[4].width = Cm(5)
+        table.autofit = True
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = self._l['hdr_user']
-        hdr_cells[1].text = self._l['hdr_super']
-        hdr_cells[2].text = self._t('report.pg_createdb')
-        hdr_cells[3].text = self._t('report.pg_createrole')
-        hdr_cells[4].text = self._t('report.pg_validuntil')
-        for cell in hdr_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.size = Pt(9)
-                    run.font.bold = True
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._style_header_cell(hdr_cells[0], self._l['hdr_user'])
+        self._style_header_cell(hdr_cells[1], self._l['hdr_super'])
+        self._style_header_cell(hdr_cells[2], self._t('report.pg_createdb'))
+        self._style_header_cell(hdr_cells[3], self._t('report.pg_createrole'))
+        self._style_header_cell(hdr_cells[4], self._t('report.pg_validuntil'))
         for i in range(15):
             row_cells = table.add_row().cells
             row_cells[0].text = "{{{{ pg_users[{}].username if pg_users and pg_users[{}] else '' }}}}".format(i, i)
@@ -1370,16 +1320,16 @@ class WordTemplateGenerator:
             for cell in row_cells:
                 for p in cell.paragraphs:
                     for r in p.runs:
-                        r.font.size = Pt(9)
+                        r.font.size = Pt(10)
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     def _add_notes_section(self):
         """
-        生成第 7 章「报告说明」。
+        生成第 11 章「报告说明」。
 
         以段落形式输出 5 条固定说明文字，包含：
         报告生成说明、空白项说明、磁盘信息范围说明、巡检结果免责说明、定期巡检建议。
         """
-        heading = self.doc.add_heading('7. ' + self._l['ch6'], level=1)
+        heading = self.doc.add_heading('11. ' + self._l['ch11'], level=1)
         heading_run = heading.runs[0]
         heading_run.font.size = Pt(14)
         heading_run.font.bold = True
@@ -1394,6 +1344,99 @@ class WordTemplateGenerator:
             p = self.doc.add_paragraph()
             p.add_run(note)
             p.runs[0].font.size = Pt(10)
+
+    def _add_risk_section(self):
+        """
+        生成第 7 章「风险与建议」。
+
+        包含 7.1「问题明细」和 7.2「修复速查」两个小节，
+        使用 Jinja2 模板变量占位。
+        """
+        heading = self.doc.add_heading('7. ' + self._l['ch7'], level=1)
+        heading_run = heading.runs[0]
+        heading_run.font.size = Pt(14)
+        heading_run.font.bold = True
+
+        # 7.1 问题明细
+        sub_heading = self.doc.add_heading('7.1 ' + self._t('report.risk_detail_chapter'), level=2)
+        sub_heading.runs[0].font.size = Pt(12)
+        sub_heading.runs[0].font.bold = True
+
+        tbl = self.doc.add_table(rows=1, cols=7)
+        tbl.style = 'Table Grid'
+        tbl.autofit = True
+        hdrs = [self._t('report.col_seq'), self._t('report.col_risk_item'),
+                self._t('report.col_level'), self._t('report.col_desc'),
+                self._t('report.col_priority'), self._t('report.col_owner'),
+                self._t('report.col_fix')]
+        hdr_cells = tbl.rows[0].cells
+        self._style_header_cell(hdr_cells[0], hdrs[0])
+        self._style_header_cell(hdr_cells[1], hdrs[1])
+        self._style_header_cell(hdr_cells[2], hdrs[2])
+        self._style_header_cell(hdr_cells[3], hdrs[3])
+        self._style_header_cell(hdr_cells[4], hdrs[4])
+        self._style_header_cell(hdr_cells[5], hdrs[5])
+        self._style_header_cell(hdr_cells[6], hdrs[6])
+        # 数据行 Jinja2 占位
+        for i in range(15):
+            row_cells = tbl.add_row().cells
+            row_cells[0].text = "{% if auto_analyze[" + str(i) + "] %}{{ " + str(i+1) + " }}{% endif %}"
+            row_cells[1].text = "{% if auto_analyze[" + str(i) + "] %}{{ auto_analyze[" + str(i) + "].col1 }}{% endif %}"
+            row_cells[2].text = "{% if auto_analyze[" + str(i) + "] %}{{ auto_analyze[" + str(i) + "].col2 }}{% endif %}"
+            row_cells[3].text = "{% if auto_analyze[" + str(i) + "] %}{{ auto_analyze[" + str(i) + "].col3 }}{% endif %}"
+            row_cells[4].text = "{% if auto_analyze[" + str(i) + "] %}{{ auto_analyze[" + str(i) + "].col4 }}{% endif %}"
+            row_cells[5].text = "{% if auto_analyze[" + str(i) + "] %}{{ auto_analyze[" + str(i) + "].col5 }}{% endif %}"
+            row_cells[6].text = "{% if auto_analyze[" + str(i) + "] %}{{ auto_analyze[" + str(i) + "].fix_sql }}{% endif %}"
+            for cell in row_cells:
+                for p in cell.paragraphs:
+                    for r in p.runs:
+                        r.font.size = Pt(9)
+        self.doc.add_paragraph()
+
+    def _add_ai_section(self):
+        """
+        生成第 8 章「AI 智能诊断建议」。
+
+        使用 Jinja2 模板变量占位。
+        """
+        heading = self.doc.add_heading('8. ' + self._l['ch8'], level=1)
+        heading_run = heading.runs[0]
+        heading_run.font.size = Pt(14)
+        heading_run.font.bold = True
+        p = self.doc.add_paragraph()
+        p.add_run("{{ ai_advice }}")
+        p.runs[0].font.size = Pt(11)
+        self.doc.add_paragraph()
+
+    def _add_config_baseline_section(self):
+        """
+        生成第 9 章「配置基线检查」。
+
+        使用 Jinja2 模板变量占位。
+        """
+        heading = self.doc.add_heading('9. ' + self._l['ch9'], level=1)
+        heading_run = heading.runs[0]
+        heading_run.font.size = Pt(14)
+        heading_run.font.bold = True
+        p = self.doc.add_paragraph()
+        p.add_run("{{ config_baseline_result.summary.critical_count }} 个严重 / {{ config_baseline_result.summary.warning_count }} 个警告 / {{ config_baseline_result.summary.info_count }} 个提示")
+        p.runs[0].font.size = Pt(11)
+        self.doc.add_paragraph()
+
+    def _add_index_health_section(self):
+        """
+        生成第 10 章「索引健康分析」。
+
+        使用 Jinja2 模板变量占位。
+        """
+        heading = self.doc.add_heading('10. ' + self._l['ch10'], level=1)
+        heading_run = heading.runs[0]
+        heading_run.font.size = Pt(14)
+        heading_run.font.bold = True
+        p = self.doc.add_paragraph()
+        p.add_run("{{ index_health_result.summary.db_size_gb }} GB / {{ index_health_result.summary.total_indexes }} 个索引")
+        p.runs[0].font.size = Pt(11)
+        self.doc.add_paragraph()
 
 
 def getlogger():
@@ -1656,7 +1699,7 @@ def input_db_info():
     user = input(_t("cli_db_user").format(default="postgres")).strip() or "postgres"
     import getpass
     password = getpass.getpass(_t("cli_db_password")).strip()
-    db_name = input(_t("cli_db_name").format(default="PostgreSQL_Server")).strip() or "PostgreSQL_Server"
+    db_name = input(_t("cli_db_name").format(default="postgres")).strip() or "postgres"
     print("\n" + _t("cli_ssh_config_title"))
     print(_t("cli_ssh_config_note"))
     enable_ssh = input(_t("cli_ssh_enable")).strip().lower()
@@ -2009,6 +2052,44 @@ class getData(object):
         except Exception as e:
             print("\u26a0\ufe0f 慢查询深度分析失败: %s" % e)
 
+        # ── 配置基线检查（P3）──────────────────────────────
+        self.context['config_baseline_result'] = None
+        try:
+            from config_baseline import check_pg_config_baseline
+            if self.conn_db2:
+                print("\n\U0001f539 " + self._t('pg_cli_config_baseline_checking'))
+                cb_result = check_pg_config_baseline(self.conn_db2)
+                self.context['config_baseline_result'] = cb_result
+                summary = cb_result.get('summary', {})
+                crit = summary.get('critical_count', 0)
+                warn = summary.get('warning_count', 0)
+                info = summary.get('info_count', 0)
+                print("  \u2705  " + self._t('pg_cli_config_baseline_ok').format(
+                    critical=crit, warning=warn, info=info))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("\u26a0\ufe0f 配置基线检查失败: %s" % e)
+
+        # ── 索引健康分析（P3）──────────────────────────────
+        self.context['index_health_result'] = None
+        try:
+            from index_health import analyze_pg_indexes
+            if self.conn_db2:
+                print("\n\U0001f50d " + self._t('pg_cli_index_health_checking'))
+                ih_result = analyze_pg_indexes(self.conn_db2)
+                self.context['index_health_result'] = ih_result
+                summary = ih_result.get('summary', {})
+                missing = summary.get('missing_count', 0)
+                redundant = summary.get('redundant_count', 0)
+                unused = summary.get('unused_count', 0)
+                print("  \u2705  " + self._t('pg_cli_index_health_ok').format(
+                    missing=missing, redundant=redundant, unused=unused))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("\u26a0\ufe0f 索引健康分析失败: %s" % e)
+
         self.print_progress_bar(total_steps, total_steps, prefix=_t('pg_cli_progress_prefix'), suffix=_t('pg_cli_complete_suffix'))
         return self.context
 
@@ -2250,9 +2331,33 @@ class saveDoc(object):
                         cutoff_idx = i
                         break
                 if cutoff_idx is not None:
+                    ns_w = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
                     body = doc2._element.body
-                    for para in list(body.iterchildren())[cutoff_idx:]:
-                        body.remove(para)
+                    body_children = list(body.iterchildren())
+                    # 确保不删掉最后的 sectPr（如果 body 末尾是 sectPr）
+                    to_remove = []
+                    for el in body_children[cutoff_idx:]:
+                        tag = el.tag.split('}')[1] if '}' in el.tag else el.tag
+                        if tag != 'sectPr':
+                            to_remove.append(el)
+                    for el in to_remove:
+                        body.remove(el)
+                    # 确认 sectPr 仍在
+                    remaining_sectPr = body.find('{%s}sectPr' % ns_w)
+                    if remaining_sectPr is None:
+                        from docx.oxml import OxmlElement
+                        from docx.oxml.ns import qn
+                        new_sp = OxmlElement('w:sectPr')
+                        pgMar = OxmlElement('w:pgMar')
+                        for attr, val in [('w:top','1440'),('w:bottom','1440'),('w:left','1440'),('w:right','1440')]:
+                            pgMar.set(qn(attr), val)
+                        new_sp.append(pgMar)
+                        pgSz = OxmlElement('w:pgSz')
+                        pgSz.set(qn('w:w'), '11906')
+                        pgSz.set(qn('w:h'), '16838')
+                        new_sp.append(pgSz)
+                        body.append(new_sp)
+
 
                 auto_analyze = self.context.get('auto_analyze', [])
                 high_risk = [i for i in auto_analyze if i.get('col2') == self._t('report.risk_high')]
@@ -2260,7 +2365,7 @@ class saveDoc(object):
                 low_risk  = [i for i in auto_analyze if i.get('col2') in (self._t('report.risk_low'), self._t('report.risk_suggest'))]
 
                 # 第 7 章 风险与建议
-                doc2.add_heading('7. ' + self._t('report.risk_chapter'), level=1)
+                doc2.add_heading('7. ' + self._t('report.fallback_pg_risk_chapter'), level=1)
                 p = doc2.add_paragraph()
                 p.add_run(self._t('report.detected_prefix'))
                 if high_risk:
@@ -2343,8 +2448,172 @@ class saveDoc(object):
                     p = doc2.add_paragraph()
                     p.add_run(self._t('report.ai_disabled')).italic = True
 
-                # 第 9 章 报告说明
-                doc2.add_heading('9. ' + self._t('report.notes_chapter'), level=1)
+                # 第 9 章 配置基线检查（P3）
+                cb_result = self.context.get('config_baseline_result')
+                if cb_result:
+                    doc2.add_heading('9. ' + self._t('report.config_baseline_chapter'), level=1)
+                    db_size = cb_result.get('db_size_gb', 0)
+                    total_mem = cb_result.get('total_memory_gb', 0)
+                    p = doc2.add_paragraph()
+                    p.add_run("数据库规模: %.2f GB | 主机内存: %.1f GB" % (db_size, total_mem)).italic = True
+                    doc2.add_paragraph()
+                    items = cb_result.get('items', [])
+                    summary = cb_result.get('summary', {})
+                    crit_count = summary.get('critical_count', 0)
+                    warn_count = summary.get('warning_count', 0)
+                    info_count = summary.get('info_count', 0)
+                    p = doc2.add_paragraph()
+                    p.add_run(self._t('report.config_baseline_summary').format(
+                        critical=crit_count, warning=warn_count, info=info_count))
+                    if items:
+                        col_w = [Cm(3.0), Cm(2.5), Cm(2.5), Cm(2.5), Cm(5.5)]
+                        tbl = doc2.add_table(rows=1+len(items), cols=5)
+                        tbl.style = 'Table Grid'
+                        hdrs = [self._t('report.col_param'), self._t('report.col_current'),
+                                self._t('report.col_recommended'), self._t('report.col_gap'),
+                                self._t('report.col_desc')]
+                        for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                            cell.text = ht
+                            self._set_cell_bg(cell, '336699')
+                            cell.paragraphs[0].runs[0].bold = True
+                            cell.paragraphs[0].runs[0].font.size = Pt(9)
+                            cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell.width = col_w[j]
+                        for idx, item in enumerate(items, 1):
+                            row = tbl.rows[idx].cells
+                            row[0].text = item.get('param', '')
+                            row[1].text = item.get('current', '')
+                            row[2].text = item.get('recommended', '')
+                            row[3].text = item.get('gap', '')
+                            row[4].text = item.get('description', '')
+                            sev = item.get('severity', 'info')
+                            cm = {'critical': RGBColor(0xC0,0x00,0x00), 'warning': RGBColor(0xFF,0x78,0x00), 'info': RGBColor(0x37,0x86,0x10)}
+                            if sev in cm:
+                                for cell in row:
+                                    for para in cell.paragraphs:
+                                        for run in para.runs:
+                                            run.font.color.rgb = cm[sev]
+                                            break
+                                    break
+                            for j, cell in enumerate(row):
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.size = Pt(9)
+                                cell.width = col_w[j]
+                    else:
+                        doc2.add_paragraph(self._t('report.config_baseline_no_issues'))
+                    doc2.add_paragraph()
+
+                # 第 10 章 索引健康分析（P3）
+                ih_result = self.context.get('index_health_result')
+                if ih_result:
+                    doc2.add_heading('10. ' + self._t('report.index_health_chapter'), level=1)
+                    summary = ih_result.get('summary', {})
+                    db_size = summary.get('db_size_gb', 0)
+                    total_idx = summary.get('total_indexes', 0)
+                    p = doc2.add_paragraph()
+                    p.add_run("数据库大小: %.2f GB | 总索引数: %d" % (db_size, total_idx)).italic = True
+                    doc2.add_paragraph()
+                    # 缺失索引
+                    missing = ih_result.get('missing_indexes', [])
+                    if missing:
+                        doc2.add_heading(self._t('report.index_missing_sub'), level=2)
+                        col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                        tbl = doc2.add_table(rows=1+len(missing), cols=5)
+                        tbl.style = 'Table Grid'
+                        hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                                self._t('report.col_column'), self._t('report.col_select_count'),
+                                self._t('report.col_recommendation')]
+                        for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                            cell.text = ht
+                            self._set_cell_bg(cell, '993333')
+                            cell.paragraphs[0].runs[0].bold = True
+                            cell.paragraphs[0].runs[0].font.size = Pt(9)
+                            cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell.width = col_w[j]
+                        for idx, item in enumerate(missing, 1):
+                            row = tbl.rows[idx].cells
+                            row[0].text = item.get('table_schema', '')
+                            row[1].text = item.get('table_name', '')
+                            row[2].text = item.get('column_name', '')
+                            row[3].text = str(item.get('select_count', 0))
+                            row[4].text = item.get('recommendation', '')
+                            for j, cell in enumerate(row):
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.size = Pt(9)
+                                cell.width = col_w[j]
+                        doc2.add_paragraph()
+                    # 冗余索引
+                    redundant = ih_result.get('redundant_indexes', [])
+                    if redundant:
+                        doc2.add_heading(self._t('report.index_redundant_sub'), level=2)
+                        col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                        tbl = doc2.add_table(rows=1+len(redundant), cols=5)
+                        tbl.style = 'Table Grid'
+                        hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                                'Index 1', 'Index 2', self._t('report.col_recommendation')]
+                        for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                            cell.text = ht
+                            self._set_cell_bg(cell, '996633')
+                            cell.paragraphs[0].runs[0].bold = True
+                            cell.paragraphs[0].runs[0].font.size = Pt(9)
+                            cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell.width = col_w[j]
+                        for idx, item in enumerate(redundant, 1):
+                            row = tbl.rows[idx].cells
+                            row[0].text = item.get('table_schema', '')
+                            row[1].text = item.get('table_name', '')
+                            row[2].text = item.get('index1', '')
+                            row[3].text = item.get('index2', '')
+                            row[4].text = item.get('recommendation', '')
+                            for j, cell in enumerate(row):
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.size = Pt(9)
+                                cell.width = col_w[j]
+                        doc2.add_paragraph()
+                    # 未使用索引
+                    unused = ih_result.get('unused_indexes', [])
+                    if unused:
+                        doc2.add_heading(self._t('report.index_unused_sub'), level=2)
+                        col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.0), Cm(2.0), Cm(4.5)]
+                        tbl = doc2.add_table(rows=1+len(unused), cols=6)
+                        tbl.style = 'Table Grid'
+                        hdrs = [self._t('report.col_schema'), self._t('report.col_table'),
+                                self._t('report.col_index'), self._t('report.col_last_used'),
+                                self._t('report.col_days_unused'), self._t('report.col_recommendation')]
+                        for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                            cell.text = ht
+                            self._set_cell_bg(cell, '669933')
+                            cell.paragraphs[0].runs[0].bold = True
+                            cell.paragraphs[0].runs[0].font.size = Pt(9)
+                            cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell.width = col_w[j]
+                        for idx, item in enumerate(unused, 1):
+                            row = tbl.rows[idx].cells
+                            row[0].text = item.get('table_schema', '')
+                            row[1].text = item.get('table_name', '')
+                            row[2].text = item.get('index_name', '')
+                            row[3].text = item.get('last_used', 'N/A')
+                            row[4].text = str(item.get('days_unused', 0))
+                            row[5].text = item.get('recommendation', '')
+                            for j, cell in enumerate(row):
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        run.font.size = Pt(9)
+                                cell.width = col_w[j]
+                        doc2.add_paragraph()
+                    if not missing and not redundant and not unused:
+                        doc2.add_paragraph(self._t('report.index_health_no_issues'))
+                    doc2.add_paragraph()
+
+                # 第 11 章 报告说明
+                doc2.add_heading('11. ' + self._t('report.fallback_pg_notes_chapter'), level=1)
                 notes = [
                     self._t("report.note_1_pg"),
                     self._t("report.fallback_note_2"),

@@ -323,9 +323,9 @@ def run_oracle_full_task(task_id, db_info, inspector_name):
         # Oracle 连接方式：优先 service_name，其次 sid
         args.servicename = db_info.get('service_name') or None
         args.sid         = db_info.get('sid') or None
-        # 如果都没指定，默认用 ORCL 作为 SID
+        # 如果都没指定，默认用 orcl 作为 SID
         if not args.sid and not args.servicename:
-            args.sid = db_info.get('database', 'ORCL')
+            args.sid = db_info.get('database', 'orcl')
         # 解析 "user as sysdba" 语法，分离真实用户名和 SYSDBA 标识
         _raw_user = db_info.get('user', 'sys').strip()
         _sysdba_from_user = bool(re.search(r'\bas\s+sysdba\b', _raw_user, re.IGNORECASE))
@@ -728,6 +728,166 @@ def run_tidb_task(task_id, db_info, inspector_name):
         if task:
             task['status'] = 'error'
 
+
+# ── 配置基线检查任务 ────────────────────────────────────────
+def run_config_task(task_id, db_info, output_format='txt'):
+    """配置基线检查 Web UI 任务"""
+    emit = socketio.emit
+    task = tasks.get(task_id)
+
+    def _emit(event, data):
+        msg = data.get('msg', '')
+        if msg and task is not None:
+            task.setdefault('log', []).append(msg)
+        emit(event, data, room=task_id)
+
+    _emit('log', {'msg': f"[{_ts()}] Starting Config Baseline check..."})
+
+    try:
+        db_type = db_info.get('db_type', 'mysql')
+        reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+        os.makedirs(reports_dir, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        if db_type == 'mysql':
+            import pymysql
+            conn = pymysql.connect(
+                host=db_info['host'], port=int(db_info['port']),
+                user=db_info['user'], password=db_info['password'],
+                charset='utf8mb4'
+            )
+            db_label = 'MySQL'
+        elif db_type == 'pg':
+            import psycopg2
+            conn = psycopg2.connect(
+                host=db_info['host'], port=int(db_info['port']),
+                user=db_info['user'], password=db_info['password'],
+                database=db_info.get('database', 'postgres')
+            )
+            db_label = 'PostgreSQL'
+        else:
+            raise ValueError(f"Unsupported db_type: {db_type}")
+
+        _emit('log', {'msg': f"[{_ts()}] Connected to {db_label}, analyzing configuration..."})
+
+        from config_baseline import get_config_baseline, format_config_baseline_report
+        report = get_config_baseline(db_type, conn)
+        conn.close()
+
+        _emit('log', {'msg': f"[{_ts()}] Generating {output_format.upper()} report..."})
+
+        label = db_info.get('label', db_info.get('host', 'unknown'))
+        if output_format == 'pdf':
+            from pdf_export import generate_config_baseline_pdf_report
+            file_name = f"{db_label}配置基线报告_{label}_{timestamp}.pdf"
+            ofile = os.path.join(reports_dir, file_name)
+            success, result = generate_config_baseline_pdf_report(report, ofile, db_type)
+            if not success:
+                raise RuntimeError(result)
+        else:
+            report_text = format_config_baseline_report(report, db_type)
+            file_name = f"{db_label}配置基线报告_{label}_{timestamp}.txt"
+            ofile = os.path.join(reports_dir, file_name)
+            with open(ofile, 'w', encoding='utf-8') as f:
+                f.write(report_text)
+            # 打印到日志
+            for line in report_text.split('\n'):
+                if line.strip():
+                    _emit('log', {'msg': line})
+
+        _emit('log', {'msg': f"[{_ts()}] Report generated: {file_name}"})
+
+        if task:
+            task['status'] = 'done'
+            task['report_file'] = ofile
+            task['report_name'] = file_name
+
+        _emit('done', {'msg': f"Config Baseline check completed: {file_name}", 'task_id': task_id})
+    except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stdout)
+        _emit('error', {'msg': f"Config Baseline check failed: {e}\n{traceback.format_exc()}"})
+
+
+# ── 索引健康分析任务 ────────────────────────────────────────
+def run_index_task(task_id, db_info, output_format='txt'):
+    """索引健康分析 Web UI 任务"""
+    emit = socketio.emit
+    task = tasks.get(task_id)
+
+    def _emit(event, data):
+        msg = data.get('msg', '')
+        if msg and task is not None:
+            task.setdefault('log', []).append(msg)
+        emit(event, data, room=task_id)
+
+    _emit('log', {'msg': f"[{_ts()}] Starting Index Health Analysis..."})
+
+    try:
+        db_type = db_info.get('db_type', 'mysql')
+        reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+        os.makedirs(reports_dir, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        if db_type == 'mysql':
+            import pymysql
+            conn = pymysql.connect(
+                host=db_info['host'], port=int(db_info['port']),
+                user=db_info['user'], password=db_info['password'],
+                charset='utf8mb4'
+            )
+            db_label = 'MySQL'
+        elif db_type == 'pg':
+            import psycopg2
+            conn = psycopg2.connect(
+                host=db_info['host'], port=int(db_info['port']),
+                user=db_info['user'], password=db_info['password'],
+                database=db_info.get('database', 'postgres')
+            )
+            db_label = 'PostgreSQL'
+        else:
+            raise ValueError(f"Unsupported db_type: {db_type}")
+
+        _emit('log', {'msg': f"[{_ts()}] Connected to {db_label}, analyzing indexes..."})
+
+        from index_health import get_index_health, format_index_health_report
+        report = get_index_health(db_type, conn)
+        conn.close()
+
+        _emit('log', {'msg': f"[{_ts()}] Generating {output_format.upper()} report..."})
+
+        label = db_info.get('label', db_info.get('host', 'unknown'))
+        if output_format == 'pdf':
+            from pdf_export import generate_index_health_pdf_report
+            file_name = f"{db_label}索引健康分析_{label}_{timestamp}.pdf"
+            ofile = os.path.join(reports_dir, file_name)
+            success, result = generate_index_health_pdf_report(report, ofile, db_type)
+            if not success:
+                raise RuntimeError(result)
+        else:
+            report_text = format_index_health_report(report, db_type)
+            file_name = f"{db_label}索引健康分析_{label}_{timestamp}.txt"
+            ofile = os.path.join(reports_dir, file_name)
+            with open(ofile, 'w', encoding='utf-8') as f:
+                f.write(report_text)
+            for line in report_text.split('\n'):
+                if line.strip():
+                    _emit('log', {'msg': line})
+
+        _emit('log', {'msg': f"[{_ts()}] Report generated: {file_name}"})
+
+        if task:
+            task['status'] = 'done'
+            task['report_file'] = ofile
+            task['report_name'] = file_name
+
+        _emit('done', {'msg': f"Index Health Analysis completed: {file_name}", 'task_id': task_id})
+    except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stdout)
+        _emit('error', {'msg': f"Index Health Analysis failed: {e}\n{traceback.format_exc()}"})
+
+
 # ── 连接测试函数 ────────────────────────────────────────────
 def test_mysql_connection(host, port, user, password, database=None):
     try:
@@ -1117,6 +1277,84 @@ def api_start_inspection():
             'sqlserver':  run_sqlserver_task,
             'tidb':       run_tidb_task,
         }.get(db_type, run_mysql_task), args=(task_id, db_info, inspector_name))
+        t.daemon = True
+        t.start()
+        return jsonify({'ok': True, 'task_id': task_id})
+    except Exception as e:
+        import traceback, sys
+        traceback.print_exc(file=sys.stdout)
+        return jsonify({'ok': False, 'msg': repr(e)})
+
+
+@app.route('/api/start_config_baseline', methods=['POST'])
+def api_start_config_baseline():
+    """启动配置基线检查任务"""
+    try:
+        data = request.json
+        db_type = data.get('db_type', 'mysql')
+        if db_type not in ('mysql', 'pg'):
+            return jsonify({'ok': False, 'msg': 'Only MySQL and PostgreSQL are supported'})
+
+        db_info = {
+            'host': data.get('host', ''),
+            'port': int(data.get('port', 0) or (3306 if db_type == 'mysql' else 5432)),
+            'user': data.get('user', ''),
+            'password': data.get('password', ''),
+            'database': data.get('database') or ('postgres' if db_type == 'pg' else ''),
+            'label': data.get('name', data.get('host', 'unknown')),
+            'db_type': db_type,
+        }
+
+        output_format = data.get('output_format', 'txt')
+
+        task_id = str(uuid.uuid4())
+        tasks[task_id] = {
+            'id': task_id,
+            'db_type': f'config_{db_type}',
+            'db_info': db_info,
+            'status': 'running',
+            'started_at': datetime.datetime.now().isoformat()
+        }
+        t = threading.Thread(target=run_config_task, args=(task_id, db_info, output_format))
+        t.daemon = True
+        t.start()
+        return jsonify({'ok': True, 'task_id': task_id})
+    except Exception as e:
+        import traceback, sys
+        traceback.print_exc(file=sys.stdout)
+        return jsonify({'ok': False, 'msg': repr(e)})
+
+
+@app.route('/api/start_index_health', methods=['POST'])
+def api_start_index_health():
+    """启动索引健康分析任务"""
+    try:
+        data = request.json
+        db_type = data.get('db_type', 'mysql')
+        if db_type not in ('mysql', 'pg'):
+            return jsonify({'ok': False, 'msg': 'Only MySQL and PostgreSQL are supported'})
+
+        db_info = {
+            'host': data.get('host', ''),
+            'port': int(data.get('port', 0) or (3306 if db_type == 'mysql' else 5432)),
+            'user': data.get('user', ''),
+            'password': data.get('password', ''),
+            'database': data.get('database') or ('postgres' if db_type == 'pg' else ''),
+            'label': data.get('name', data.get('host', 'unknown')),
+            'db_type': db_type,
+        }
+
+        output_format = data.get('output_format', 'txt')
+
+        task_id = str(uuid.uuid4())
+        tasks[task_id] = {
+            'id': task_id,
+            'db_type': f'index_{db_type}',
+            'db_info': db_info,
+            'status': 'running',
+            'started_at': datetime.datetime.now().isoformat()
+        }
+        t = threading.Thread(target=run_index_task, args=(task_id, db_info, output_format))
         t.daemon = True
         t.start()
         return jsonify({'ok': True, 'task_id': task_id})

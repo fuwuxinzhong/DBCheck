@@ -909,6 +909,166 @@ class WordTemplateGeneratorSQLServer:
             self._render_table(doc, self.data['backups'], headers,
                 _t('sqlserver.chapter_backups'))
 
+        # 配置基线检查（P3）
+        cb_result = self.data.get('config_baseline_result')
+        if cb_result:
+            doc.add_heading(_t('report.config_baseline_chapter'), level=1)
+            db_size = cb_result.get('db_size_gb', 0)
+            total_mem = cb_result.get('total_memory_gb', 0)
+            p = doc.add_paragraph()
+            p.add_run("数据库规模: %.2f GB | 主机内存: %.1f GB" % (db_size, total_mem)).italic = True
+            doc.add_paragraph()
+            summary = cb_result.get('summary', {})
+            crit = summary.get('critical_count', 0)
+            warn = summary.get('warning_count', 0)
+            info = summary.get('info_count', 0)
+            p = doc.add_paragraph()
+            p.add_run(_t('report.config_baseline_summary').format(critical=crit, warning=warn, info=info))
+            items = cb_result.get('items', [])
+            if items:
+                col_w = [Cm(3.0), Cm(2.5), Cm(2.5), Cm(2.5), Cm(5.5)]
+                tbl = doc.add_table(rows=1+len(items), cols=5)
+                tbl.style = 'Table Grid'
+                hdrs = [_t('report.col_param'), _t('report.col_current'),
+                        _t('report.col_recommended'), _t('report.col_gap'),
+                        _t('report.col_desc')]
+                for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                    cell.text = ht
+                    self._set_cell_bg(cell, '336699')
+                    cell.paragraphs[0].runs[0].bold = True
+                    cell.paragraphs[0].runs[0].font.size = Pt(9)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    cell.width = col_w[j]
+                for idx, item in enumerate(items, 1):
+                    row = tbl.rows[idx].cells
+                    row[0].text = item.get('param', '')
+                    row[1].text = item.get('current', '')
+                    row[2].text = item.get('recommended', '')
+                    row[3].text = item.get('gap', '')
+                    row[4].text = item.get('description', '')
+                    sev = item.get('severity', 'info')
+                    cm = {'critical': RGBColor(0xC0,0x00,0x00), 'warning': RGBColor(0xFF,0x78,0x00), 'info': RGBColor(0x37,0x86,0x10)}
+                    if sev in cm:
+                        for cell in row:
+                            for para in cell.paragraphs:
+                                for run in para.runs:
+                                    run.font.color.rgb = cm[sev]
+                                    break
+                            break
+                    for j, cell in enumerate(row):
+                        for para in cell.paragraphs:
+                            for run in para.runs:
+                                run.font.size = Pt(9)
+                        cell.width = col_w[j]
+            else:
+                doc.add_paragraph(_t('report.config_baseline_no_issues'))
+            doc.add_paragraph()
+
+        # 索引健康分析（P3）
+        ih_result = self.data.get('index_health_result')
+        if ih_result:
+            doc.add_heading(_t('report.index_health_chapter'), level=1)
+            summary = ih_result.get('summary', {})
+            db_size = summary.get('db_size_gb', 0)
+            total_idx = summary.get('total_indexes', 0)
+            p = doc.add_paragraph()
+            p.add_run("数据库大小: %.2f GB | 总索引数: %d" % (db_size, total_idx)).italic = True
+            doc.add_paragraph()
+            missing = ih_result.get('missing_indexes', [])
+            redundant = ih_result.get('redundant_indexes', [])
+            unused = ih_result.get('unused_indexes', [])
+            if missing:
+                doc.add_heading(_t('report.index_missing_sub'), level=2)
+                col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                tbl = doc.add_table(rows=1+len(missing), cols=5)
+                tbl.style = 'Table Grid'
+                hdrs = [_t('report.col_schema'), _t('report.col_table'),
+                        _t('report.col_column'), _t('report.col_select_count'),
+                        _t('report.col_recommendation')]
+                for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                    cell.text = ht
+                    self._set_cell_bg(cell, '993333')
+                    cell.paragraphs[0].runs[0].bold = True
+                    cell.paragraphs[0].runs[0].font.size = Pt(9)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    cell.width = col_w[j]
+                for idx, item in enumerate(missing, 1):
+                    row = tbl.rows[idx].cells
+                    row[0].text = item.get('table_schema', '')
+                    row[1].text = item.get('table_name', '')
+                    row[2].text = item.get('column_name', '')
+                    row[3].text = str(item.get('select_count', 0))
+                    row[4].text = item.get('recommendation', '')
+                    for j, cell in enumerate(row):
+                        for para in cell.paragraphs:
+                            for run in para.runs:
+                                run.font.size = Pt(9)
+                        cell.width = col_w[j]
+                doc.add_paragraph()
+            if redundant:
+                doc.add_heading(_t('report.index_redundant_sub'), level=2)
+                col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5), Cm(6.0)]
+                tbl = doc.add_table(rows=1+len(redundant), cols=5)
+                tbl.style = 'Table Grid'
+                hdrs = [_t('report.col_schema'), _t('report.col_table'),
+                        'Index 1', 'Index 2', _t('report.col_recommendation')]
+                for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                    cell.text = ht
+                    self._set_cell_bg(cell, '996633')
+                    cell.paragraphs[0].runs[0].bold = True
+                    cell.paragraphs[0].runs[0].font.size = Pt(9)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    cell.width = col_w[j]
+                for idx, item in enumerate(redundant, 1):
+                    row = tbl.rows[idx].cells
+                    row[0].text = item.get('table_schema', '')
+                    row[1].text = item.get('table_name', '')
+                    row[2].text = item.get('index1', '')
+                    row[3].text = item.get('index2', '')
+                    row[4].text = item.get('recommendation', '')
+                    for j, cell in enumerate(row):
+                        for para in cell.paragraphs:
+                            for run in para.runs:
+                                run.font.size = Pt(9)
+                        cell.width = col_w[j]
+                doc.add_paragraph()
+            if unused:
+                doc.add_heading(_t('report.index_unused_sub'), level=2)
+                col_w = [Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.0), Cm(2.0), Cm(4.5)]
+                tbl = doc.add_table(rows=1+len(unused), cols=6)
+                tbl.style = 'Table Grid'
+                hdrs = [_t('report.col_schema'), _t('report.col_table'),
+                        _t('report.col_index'), _t('report.col_last_used'),
+                        _t('report.col_days_unused'), _t('report.col_recommendation')]
+                for j, (cell, ht) in enumerate(zip(tbl.rows[0].cells, hdrs)):
+                    cell.text = ht
+                    self._set_cell_bg(cell, '669933')
+                    cell.paragraphs[0].runs[0].bold = True
+                    cell.paragraphs[0].runs[0].font.size = Pt(9)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    cell.width = col_w[j]
+                for idx, item in enumerate(unused, 1):
+                    row = tbl.rows[idx].cells
+                    row[0].text = item.get('table_schema', '')
+                    row[1].text = item.get('table_name', '')
+                    row[2].text = item.get('index_name', '')
+                    row[3].text = item.get('last_used', 'N/A')
+                    row[4].text = str(item.get('days_unused', 0))
+                    row[5].text = item.get('recommendation', '')
+                    for j, cell in enumerate(row):
+                        for para in cell.paragraphs:
+                            for run in para.runs:
+                                run.font.size = Pt(9)
+                        cell.width = col_w[j]
+                doc.add_paragraph()
+            if not missing and not redundant and not unused:
+                doc.add_paragraph(_t('report.index_health_no_issues'))
+            doc.add_paragraph()
+
         # 健康总结
         if self.data.get('summary'):
             p = doc.add_heading(_t('sqlserver.chapter_summary'), level=1)
@@ -1723,6 +1883,42 @@ class DBCheckSQLServer:
             pass
         except Exception as e:
             print("\u26a0\ufe0f 慢查询深度分析失败: %s" % e)
+
+        # ── 配置基线检查（P3）──────────────────────────────
+        self.data['config_baseline_result'] = None
+        try:
+            from config_baseline import check_sqlserver_config_baseline
+            if self.conn:
+                print("\n\U0001f539 " + _t('sqlserver.cli_config_baseline_checking'))
+                cb_result = check_sqlserver_config_baseline(self.conn)
+                self.data['config_baseline_result'] = cb_result
+                summary = cb_result.get('summary', {})
+                crit = summary.get('critical_count', 0)
+                warn = summary.get('warning_count', 0)
+                info = summary.get('info_count', 0)
+                print("  \u2705  " + (_t('sqlserver.cli_config_baseline_ok') % (crit, warn, info)))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("  \u26a0  配置基线检查失败: %s" % e)
+
+        # ── 索引健康分析（P3）──────────────────────────────
+        self.data['index_health_result'] = None
+        try:
+            from index_health import analyze_sqlserver_indexes
+            if self.conn:
+                print("\n\U0001f50d " + _t('sqlserver.cli_index_health_checking'))
+                ih_result = analyze_sqlserver_indexes(self.conn)
+                self.data['index_health_result'] = ih_result
+                sm = ih_result.get('summary', {})
+                miss = sm.get('missing_count', 0)
+                redun = sm.get('redundant_count', 0)
+                unused = sm.get('unused_count', 0)
+                print("  \u2705  " + (_t('sqlserver.cli_index_health_ok') % (miss, redun, unused)))
+        except ImportError:
+            pass
+        except Exception as e:
+            print("  \u26a0  索引健康分析失败: %s" % e)
 
         # 4. 生成总结
         self._generate_summary()
